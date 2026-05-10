@@ -145,6 +145,11 @@ export class GameEngine {
       for (const a of kakanCandidates(player)) actions.push(a);
     }
 
+    // 九種九牌
+    if (this.state.config.abortiveDraws.kyushuKyuhai && this.isKyushuEligible(seat, player)) {
+      actions.push({ kind: 'kyushu_kyuhai' });
+    }
+
     // 打牌
     actions.push(...getDiscardCandidates(this.state, seat));
 
@@ -239,6 +244,11 @@ export class GameEngine {
 
     if (action.kind === 'riichi') {
       this.doRiichiDeclaration(seat, action.tile);
+      return;
+    }
+
+    if (action.kind === 'kyushu_kyuhai') {
+      this.doKyushuKyuhai(seat);
       return;
     }
 
@@ -353,6 +363,12 @@ export class GameEngine {
     // 優先度: ロン > ポン/大明槓 > チー
     const ronners = calls.filter(p => p.response === 'ron').map(p => p.seat);
     if (ronners.length > 0) {
+      // 三家和流局
+      if (ronners.length >= 3 && this.state.config.abortiveDraws.sanchaHou) {
+        this.state.history.push({ kind: 'ryukyoku', reason: 'sancha_hou' });
+        this.state.turn.phase = 'end';
+        return;
+      }
       this.doRon(ronners, discarder, discardedTile);
       return;
     }
@@ -502,7 +518,7 @@ export class GameEngine {
     this.state.history.push({ kind: 'meld', seat, meldKind: 'ankan', tiles: kanTiles });
 
     // 搶槓チェック (暗槓は搶槓なし)
-    this.drawRinshanAndContinue(seat, false);
+    this.drawRinshanAndContinue(seat);
   }
 
   // ---------- 加槓 ----------
@@ -544,18 +560,13 @@ export class GameEngine {
       }
     }
 
-    this.drawRinshanAndContinue(seat, false);
+    this.drawRinshanAndContinue(seat);
   }
 
   // ---------- 嶺上ツモ ----------
 
-  private drawRinshanAndContinue(seat: Seat, isRinshanAgari: boolean): void {
-    const kanCount = this.state.wall.doraIndicatorCount - 1; // 0-indexed
-    if (kanCount >= 4) {
-      // 四開槓: Phase 2c で処理。暫定で次ツモへ
-      this.advanceToNextDraw(seat);
-      return;
-    }
+  private drawRinshanAndContinue(seat: Seat): void {
+    const kanCount = this.state.wall.doraIndicatorCount - 1; // 0-indexed (= 槓数)
 
     const rinshanId = rinshanTileId(this.state.wall, kanCount);
     const tile = tileIdToTile(rinshanId, this.state.config.redDora);
@@ -575,9 +586,21 @@ export class GameEngine {
 
     // 嶺上ツモ和了チェック
     if (this.calc && this.checkTsumoAgari(seat, player)) {
-      // isRinshan フラグを立てて和了計算
       this.doTsumoRinshan(seat, tile);
       return;
+    }
+
+    // 四開槓流局: 4槓目の嶺上で非和了
+    const newKanCount = this.state.wall.doraIndicatorCount - 1;
+    if (this.state.config.abortiveDraws.suukaikan && newKanCount >= 4) {
+      const maxKansByOne = Math.max(...this.state.players.map(p =>
+        p.melds.filter(m => m.kind === 'ankan' || m.kind === 'kakan' || m.kind === 'daiminkan').length
+      ));
+      if (maxKansByOne < 4) {
+        this.state.history.push({ kind: 'ryukyoku', reason: 'suukaikan' });
+        this.state.turn.phase = 'end';
+        return;
+      }
     }
 
     this.state.turn.seat = seat;
@@ -744,7 +767,7 @@ export class GameEngine {
     this.clearAllIppatsu();
     this.state.history.push({ kind: 'meld', seat: caller, meldKind: 'daiminkan', tiles: meldTiles });
 
-    this.drawRinshanAndContinue(caller, false);
+    this.drawRinshanAndContinue(caller);
   }
 
   // ---------- ロン ----------
@@ -821,6 +844,13 @@ export class GameEngine {
       this.state.turn.junme += 1;
     }
 
+    // 四風連打チェック
+    if (this.state.config.abortiveDraws.suufonRenda && this.checkSuufonRenda()) {
+      this.state.history.push({ kind: 'ryukyoku', reason: 'suufon_renda' });
+      this.state.turn.phase = 'end';
+      return;
+    }
+
     if (this.calc) {
       this.enterCallPhase(seat, t);
     } else {
@@ -891,6 +921,45 @@ export class GameEngine {
     }
   }
 
+  // ---------- 九種九牌 ----------
+
+  private isKyushuEligible(seat: Seat, player: PlayerState): boolean {
+    if (this.state.turn.junme !== 0) return false;
+    if (player.discards.length !== 0) return false;
+    if (this.state.players.some(p => p.melds.length > 0)) return false;
+    const YAOCHUHAI = new Set([0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33]);
+    const distinct = new Set(player.hand.map(t => tileKind(t)).filter(k => YAOCHUHAI.has(k)));
+    return distinct.size >= 9;
+  }
+
+  private doKyushuKyuhai(seat: Seat): void {
+    const player = this.state.players[seat];
+    if (!this.isKyushuEligible(seat, player)) {
+      const replacement = fallbackAction(this.state, seat);
+      this.state.history.push({
+        kind: 'violation', seat,
+        attempted: { kind: 'kyushu_kyuhai' },
+        reason: 'kyushu_kyuhai: not eligible',
+        replacement,
+      });
+      this.doDiscard(seat, replacement.tile, true);
+      return;
+    }
+    this.state.history.push({ kind: 'ryukyoku', reason: 'kyushu_kyuhai' });
+    this.state.turn.phase = 'end';
+  }
+
+  // ---------- 四風連打チェック ----------
+
+  private checkSuufonRenda(): boolean {
+    if (this.state.players.some(p => p.discards.length === 0)) return false;
+    if (this.state.players.some(p => p.melds.length > 0)) return false;
+    const WIND_KINDS = new Set([27, 28, 29, 30]); // 1z-4z
+    const firstKind = tileKind(this.state.players[0].discards[0]!.tile);
+    if (!WIND_KINDS.has(firstKind)) return false;
+    return this.state.players.every(p => tileKind(p.discards[0]!.tile) === firstKind);
+  }
+
   // ---------- ユーティリティ ----------
 
   private clearAllIppatsu(): void {
@@ -905,6 +974,13 @@ export class GameEngine {
   }
 
   private advanceToNextDraw(discarder: Seat): void {
+    // 四家立直流局
+    if (this.state.config.abortiveDraws.suuchaRiichi &&
+        this.state.players.every(p => p.riichi?.declared)) {
+      this.state.history.push({ kind: 'ryukyoku', reason: 'suucha_riichi' });
+      this.state.turn.phase = 'end';
+      return;
+    }
     this.state.turn.seat = nextSeat(discarder);
     this.state.turn.phase = 'draw';
   }

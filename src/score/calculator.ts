@@ -151,7 +151,7 @@ export class RiichiRsCalculator implements ScoreCalculator {
         calc_hairi: false,
       });
     } catch {
-      return { isAgari: false, han: 0, fu: 0, score: 0, outgoingScore: 0, yakuman: false, yaku: {} };
+      return { isAgari: false, han: 0, fu: 0, score: 0, outgoingScore: [0, 0], yakuman: 0, yaku: {} };
     }
 
     return {
