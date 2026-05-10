@@ -42,7 +42,10 @@ export class OllamaAgent implements Player {
   async decide(obs: Observation, actions: Action[]): Promise<Action> {
     if (actions.length === 1) return actions[0]!;
 
-    const prompt = buildPrompt(obs, actions, this.name);
+    // qwen3 系はデフォルトで thinking モードが有効→ /no_think で無効化
+    const noThink = /qwen3/i.test(this.model);
+    let prompt = buildPrompt(obs, actions, this.name);
+    if (noThink) prompt = '/no_think\n' + prompt;
 
     if (this.verbose) {
       console.log(`\n[${this.name}] プロンプト:\n${prompt}`);
@@ -60,7 +63,7 @@ export class OllamaAgent implements Player {
             model: this.model,
             messages: [{ role: 'user', content: prompt }] as OllamaMessage[],
             stream: false,
-            options: { temperature: 0.3, num_predict: 256 },
+            options: { temperature: 0.3, num_predict: 512 },
           }),
           signal: ac.signal,
         });
