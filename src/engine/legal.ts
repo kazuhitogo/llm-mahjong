@@ -1,60 +1,74 @@
-import type { Action, DiscardAction } from '../types/action.js';
+import type { Action, DiscardAction, RiichiAction, TsumoAction, RonAction, PassAction } from '../types/action.js';
 import type { GameState } from '../types/state.js';
-import { sortTiles, sameKind } from '../tiles/tile.js';
+import type { Seat } from '../types/seat.js';
 
 /**
- * 現在番のプレイヤーが取れる合法手を列挙する。
- * Phase 1 では discard のみ（ツモ切り含む）。
+ * discard phase: 手牌の打牌候補を返す（重複種なし）。
+ * tsumo / riichi は ScoreCalculator が必要なため engine 側で付加する。
  */
-export function getLegalActions(state: GameState, seat: number): Action[] {
+export function getDiscardCandidates(state: GameState, seat: Seat): DiscardAction[] {
   if (state.turn.seat !== seat) return [];
   if (state.turn.phase !== 'discard') return [];
 
-  const player = state.players[seat as 0 | 1 | 2 | 3];
-  if (player.hand.length !== 14) {
-    throw new Error(
-      `getLegalActions: expected 14 tiles in hand for discard phase, got ${player.hand.length}`,
-    );
-  }
+  const player = state.players[seat];
+  if (player.hand.length !== 14) return [];
 
-  // 手牌中の各牌を打てる候補として列挙（重複は同種牌として 1 つに集約）
   const seen = new Set<string>();
   const out: DiscardAction[] = [];
 
-  // 直前にツモった牌（hand の末尾と仮定する）はツモ切りとして区別したい
-  // Phase 1 では「最後にツモった TileId」を別管理する設計のほうが綺麗だが、
-  // 当面は手牌の最後に追加された牌をツモ牌とみなすシンプル方針。
-  // → state.turn.lastDrawn を将来追加する想定。
-  // ここでは tsumogiri は false 固定で、判別は applyAction 側で last draw との一致で判定する。
+  // リーチ後は tsumogiri（手牌末尾 = ツモ牌）のみ
+  if (player.riichi) {
+    const last = player.hand[player.hand.length - 1]!;
+    return [{ kind: 'discard', tile: last, tsumogiri: true }];
+  }
 
   for (const t of player.hand) {
     if (seen.has(t)) continue;
     seen.add(t);
     out.push({ kind: 'discard', tile: t, tsumogiri: false });
   }
-
   return out;
 }
 
-/** プレイヤーから提出されたアクションが現在の合法手集合に含まれるか */
-export function isLegalAction(state: GameState, seat: number, action: Action): boolean {
-  if (action.kind !== 'discard') return false;
-  // discard なら手牌に該当牌があるかどうかでチェック
-  const player = state.players[seat as 0 | 1 | 2 | 3];
-  return player.hand.some((t) => t === action.tile);
+/** call phase: 自分が pendingCalls に存在する場合の合法手 */
+export function getCallCandidates(
+  state: GameState,
+  seat: Seat,
+): Array<RonAction | PassAction> {
+  if (state.turn.phase !== 'call') return [];
+  const pending = state.pendingCalls.find(p => p.seat === seat && !p.responded);
+  if (!pending) return [];
+  const out: Array<RonAction | PassAction> = [];
+  if (pending.canRon) out.push({ kind: 'ron' });
+  out.push({ kind: 'pass' });
+  return out;
 }
 
-/**
- * 違反時のフォールバック行動を返す。
- * Phase 1: 強制ツモ切り（手牌の末尾の牌を打つ）。
- */
-export function fallbackAction(state: GameState, seat: number): DiscardAction {
+/** 不正アクション時のフォールバック (discard phase 用) */
+export function fallbackAction(state: GameState, seat: Seat): DiscardAction {
   const player = state.players[seat as 0 | 1 | 2 | 3];
   const last = player.hand[player.hand.length - 1];
   if (!last) throw new Error('fallbackAction: empty hand');
   return { kind: 'discard', tile: last, tsumogiri: true };
 }
 
-// 警告抑制: sameKind / sortTiles は将来 phase で使う
-void sameKind;
-void sortTiles;
+/** 与えられたアクションが discard phase の合法手集合に含まれるか */
+export function isLegalDiscard(state: GameState, seat: Seat, action: Action): boolean {
+  if (action.kind !== 'discard') return false;
+  const player = state.players[seat as 0 | 1 | 2 | 3];
+  // リーチ後はツモ牌のみ
+  if (player.riichi) {
+    const last = player.hand[player.hand.length - 1];
+    return action.tile === last;
+  }
+  return player.hand.some(t => t === action.tile);
+}
+
+/** 後方互換のエイリアス */
+export function getLegalActions(state: GameState, seat: number): Action[] {
+  return getDiscardCandidates(state, seat as Seat);
+}
+
+export function isLegalAction(state: GameState, seat: number, action: Action): boolean {
+  return isLegalDiscard(state, seat as Seat, action);
+}

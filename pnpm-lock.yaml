@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      riichi-rs-node:
+        specifier: ^2.1.0
+        version: 2.1.0
     devDependencies:
       '@types/node':
         specifier: ^20.14.0
@@ -690,6 +694,9 @@ packages:
   resolve-pkg-maps@1.0.0:
     resolution: {integrity: sha512-seS2Tj26TBVOC2NIc2rOe2y2ZO7efxITtLZcGSOnHHNOQ7CkiUBfw0Iw2ck6xkIhPwLhKNLS8BO+hEpngQlqzw==}
 
+  riichi-rs-node@2.1.0:
+    resolution: {integrity: sha512-+VU0cezJ4M2ys8+24tgMzGzV7G3rxbKEDN20RwHi06I9q4+9IuG1dPmbLnJ/WWSy5jwN1xPyslGopkdYXeOZuw==}
+
   rollup@4.60.3:
     resolution: {integrity: sha512-pAQK9HalE84QSm4Po3EmWIZPd3FnjkShVkiMlz1iligWYkWQ7wHYd1PF/T7QZ5TVSD6uSTon5gBVMSM4JfBV+A==}
     engines: {node: '>=18.0.0', npm: '>=8.0.0'}
@@ -1328,6 +1335,8 @@ snapshots:
   resolve-from@5.0.0: {}
 
   resolve-pkg-maps@1.0.0: {}
+
+  riichi-rs-node@2.1.0: {}
 
   rollup@4.60.3:
     dependencies:

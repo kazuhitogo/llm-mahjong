@@ -113,6 +113,16 @@ export type GamePhase =
   | 'ryukyoku'     // 流局確定
   | 'end';         // 局終了
 
+/** call phase での鳴き待ちエントリ */
+export interface PendingCall {
+  seat: Seat;
+  /** ロン宣言可能か (フリテンなし・和了形成) */
+  canRon: boolean;
+  /** 応答済みか */
+  responded: boolean;
+  response: 'ron' | 'pass' | null;
+}
+
 /** 局全体の状態 */
 export interface GameState {
   config: RuleConfig;
@@ -132,6 +142,8 @@ export interface GameState {
   };
   wall: WallState;
   players: [PlayerState, PlayerState, PlayerState, PlayerState];
+  /** call phase での応答待ちプレイヤー */
+  pendingCalls: PendingCall[];
   /** イベントログ */
   history: GameEvent[];
   /** 山生成に使った乱数 seed */
@@ -145,6 +157,7 @@ export type GameEvent =
   | { kind: 'deal'; hands: [Tile[], Tile[], Tile[], Tile[]] }
   | { kind: 'draw'; seat: Seat; tile: Tile }
   | { kind: 'action'; seat: Seat; action: Action }
+  | { kind: 'riichi'; seat: Seat; tile: Tile; junme: number }
   | { kind: 'violation'; seat: Seat; attempted: Action; reason: string; replacement: Action }
   | { kind: 'ryukyoku'; reason: string }
-  | { kind: 'agari'; winner: Seat; from: Seat | 'tsumo' };
+  | { kind: 'agari'; winner: Seat; from: Seat | 'tsumo'; han: number; fu: number; score: number };

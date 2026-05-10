@@ -9,7 +9,7 @@
 - 🟡 進行中
 - ⬜ 未着手
 
-最終更新: 2026-05-09
+最終更新: 2026-05-10
 
 ---
 
@@ -43,14 +43,14 @@
 
 | 項目 | 状態 | 場所 | 備考 |
 |---|---|---|---|
-| `riichi-rs-node` 統合 | ⬜ | `src/score/`（新規） | 和了形分解・役判定・点数計算のラッパ |
-| `ScoreCalculator` インタフェース | ⬜ | `src/score/calculator.ts` | 将来の差し替え用抽象 |
-| ツモ和了アクション | ⬜ | engine | `tsumo` tool, 役・点数を計算して終局 |
-| ロン和了アクション | ⬜ | engine | `ron` tool, 鳴き受付 phase で発火 |
-| リーチ宣言 | ⬜ | engine | 立直棒、ipatsu フラグ管理 |
-| フリテン判定 | ⬜ | `src/engine/furiten.ts`（新規） | 自家河・同順・リーチ後 |
-| 嶺上開花・海底・河底 | ⬜ | engine | 状況役の判定 |
-| 点数授受 | ⬜ | `src/score/payout.ts`（新規） | 親子・ツモ・ロン・本場・供託 |
+| `riichi-rs-node` 統合 | ✅ | `src/score/calculator.ts` | createRequire で同期ロード、RiichiRsCalculator |
+| `ScoreCalculator` インタフェース | ✅ | `src/score/calculator.ts` | calculateAgari/calculateShanten/riichiCandidates/waitTiles |
+| ツモ和了アクション | ✅ | engine | `tsumo` action, legalActions に tsumo 追加, 点数授受 |
+| ロン和了アクション | ✅ | engine | call phase, `ron`/`pass` action, ダブロン対応 |
+| リーチ宣言 | ✅ | engine | `riichi` action, 1000点減点, ippatsu フラグ管理 |
+| フリテン判定 | ✅ | `src/engine/furiten.ts` | 自家河・同順・リーチ後 |
+| 嶺上開花・海底・河底 | ✅ | engine | isHaitei/isHoutei を agari 計算時に渡す |
+| 点数授受 | ✅ | `src/score/payout.ts` | 親子・ツモ・ロン・本場・供託 |
 
 ### 2b — 鳴きを追加
 
