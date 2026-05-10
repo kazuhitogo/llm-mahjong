@@ -72,14 +72,8 @@ export class HanchanEngine {
       this._scores[i as Seat] = this._engine.state.players[i as Seat].score;
     }
 
-    // 飛び判定
-    if (this._config.noChoice === 'tobi-end' && this._scores.some(s => s < 0)) {
-      this._gameOver = true;
-      return;
-    }
-
-    // 直前の局が最終局なら終了（残留供託棒は首位プレイヤーへ）
-    if (this._isLastKyoku()) {
+    // 残留供託棒を首位プレイヤーへ配る共通処理
+    const distributeSticks = () => {
       const sticks = this._engine.state.round.riichiSticks;
       if (sticks > 0) {
         let topSeat = 0 as Seat;
@@ -88,6 +82,18 @@ export class HanchanEngine {
         }
         this._scores[topSeat] += sticks * 1000;
       }
+    };
+
+    // 飛び判定
+    if (this._config.noChoice === 'tobi-end' && this._scores.some(s => s < 0)) {
+      distributeSticks();
+      this._gameOver = true;
+      return;
+    }
+
+    // 直前の局が最終局なら終了（残留供託棒は首位プレイヤーへ）
+    if (this._isLastKyoku()) {
+      distributeSticks();
       this._gameOver = true;
       return;
     }
