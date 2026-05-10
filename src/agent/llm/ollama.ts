@@ -42,10 +42,7 @@ export class OllamaAgent implements Player {
   async decide(obs: Observation, actions: Action[]): Promise<Action> {
     if (actions.length === 1) return actions[0]!;
 
-    // qwen3 系はデフォルトで thinking モードが有効→ /no_think で無効化
-    const noThink = /qwen3/i.test(this.model);
-    let prompt = buildPrompt(obs, actions, this.name);
-    if (noThink) prompt = '/no_think\n' + prompt;
+    const prompt = buildPrompt(obs, actions, this.name);
 
     if (this.verbose) {
       console.log(`\n[${this.name}] プロンプト:\n${prompt}`);
@@ -61,9 +58,16 @@ export class OllamaAgent implements Player {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model: this.model,
-            messages: [{ role: 'user', content: prompt }] as OllamaMessage[],
+            messages: [
+              {
+                role: 'system',
+                content: 'You are a mahjong AI. Select one action from the numbered list and reply with the number only.',
+              },
+              { role: 'user', content: prompt },
+            ] as OllamaMessage[],
             stream: false,
-            options: { temperature: 0.3, num_predict: 512 },
+            think: false,
+            options: { temperature: 0.3, num_predict: 256 },
           }),
           signal: ac.signal,
         });
