@@ -21,7 +21,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "cli": "tsx src/cli/play.ts"
+    "cli": "tsx src/cli/play.ts",
+    "match": "tsx src/cli/match.ts"
   },
   "engines": {
     "node": ">=20"

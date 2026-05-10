@@ -96,14 +96,14 @@
 
 | 項目 | 状態 | 場所 | 備考 |
 |---|---|---|---|
-| Player インタフェース定義 | ⬜ | `src/agent/player.ts`（新規） | `decide(observation, legalActions): Promise<Action>` |
-| HumanCli プレイヤー | ⬜ | `src/agent/human.ts` | 既存 CLI のリファクタ |
-| ScriptedBot プレイヤー | ⬜ | `src/agent/scripted.ts` | ランダム / ヒューリスティック |
-| Observation の自然言語整形 | ⬜ | `src/agent/llm/format.ts` | LLM プロンプト用 |
-| Anthropic tool スキーマ | ⬜ | `src/agent/llm/anthropic.ts` | Action を tool call に対応付け |
-| OpenAI tool スキーマ | ⬜ | `src/agent/llm/openai.ts` | 同上 |
-| LlmAgent ランナー | ⬜ | `src/agent/llm/runner.ts` | API 呼び出し、retry、reasoning ログ |
-| 4 エージェント対局ハーネス | ⬜ | `src/cli/match.ts`（新規） | 4 つの player を組み合わせて対局 |
+| Player インタフェース定義 | ✅ | `src/agent/player.ts`（新規） | `decide(observation, legalActions): Promise<Action>` |
+| HumanCli プレイヤー | — | `src/agent/human.ts` | 既存 play.ts で代替 |
+| ScriptedBot プレイヤー | ✅ | `src/agent/scripted.ts` | ランダム / tsumo優先 |
+| Observation の自然言語整形 | ✅ | `src/agent/llm/format.ts` | Ollama 用日本語プロンプト |
+| Anthropic tool スキーマ | — | — | Ollama で代替 |
+| OpenAI tool スキーマ | — | — | Ollama で代替 |
+| LlmAgent ランナー | ✅ | `src/agent/llm/ollama.ts` | Ollama API, timeout, fallback |
+| 4 エージェント対局ハーネス | ✅ | `src/cli/match.ts`（新規） | gemma4:e2b×2, qwen3.5:9b, qwen3-vl:8b |
 
 ---
 

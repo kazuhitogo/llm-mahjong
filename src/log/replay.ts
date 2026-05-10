@@ -21,8 +21,8 @@ export function replayKyoku(
     rngSeed: initEv.rngSeed,
     calculator,
     dealerSeat: initEv.dealerSeat,
-    round: initEv.round,
-    initialScores,
+    round: { ...initEv.round, wind: initEv.round.wind as 'E' | 'S' },
+    ...(initialScores ? { initialScores } : {}),
   });
 
   for (const ev of events) {

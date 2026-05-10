@@ -144,7 +144,7 @@ export class HanchanEngine {
       calculator: this._calculator,
       rules: this._config,
       dealerSeat: this._dealerSeat,
-      round: { ...this._round },
+      round: { ...this._round, wind: this._round.wind as 'E' | 'S' },
       initialScores: [...this._scores] as [number, number, number, number],
     };
     return new GameEngine(opts);
