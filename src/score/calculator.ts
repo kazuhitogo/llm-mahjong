@@ -91,6 +91,8 @@ export interface AgariInput {
   isHaitei: boolean;
   isHoutei: boolean;
   isChankan: boolean;
+  /** 天和/地和判定用: プレイヤーの最初のツモで鳴きなし */
+  isFirstTake?: boolean;
   rules: Pick<RuleConfig, 'redDora' | 'openTanyao'>;
 }
 
@@ -141,6 +143,7 @@ export class RiichiRsCalculator implements ScoreCalculator {
           ippatsu: input.isIppatsu,
           double_riichi: input.isDoubleRiichi,
           after_kan: input.isRinshan || input.isChankan,
+          first_take: input.isFirstTake ?? false,
           tile_discarded_by_someone: tileDiscardedBySomeone,
           bakaze: windToRs(input.roundWind),
           jikaze: windToRs(input.seatWind),

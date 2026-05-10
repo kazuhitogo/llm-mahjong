@@ -82,6 +82,8 @@ export interface PlayerState {
   } | null;
   /** フリテン状態 */
   isFuriten: boolean;
+  /** 包（責任払い）の対象席。大三元/大四喜を完成させた鳴きの放銃者 */
+  paoSeat: Seat | null;
 }
 
 /** 山と王牌の状態

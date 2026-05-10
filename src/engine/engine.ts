@@ -40,7 +40,14 @@ import {
   applyPassFuriten,
   resetSameTurnFuriten,
 } from './furiten.js';
-import { computeTsumoPayout, computeRonPayout, riichiSticksWinner } from '../score/payout.js';
+import {
+  computeTsumoPayout,
+  computeRonPayout,
+  computeNagashiManganPayout,
+  computePaoTsumoPayout,
+  computePaoRonPayout,
+  riichiSticksWinner,
+} from '../score/payout.js';
 
 export interface EngineOptions {
   rules?: Partial<RuleConfig>;
@@ -76,6 +83,7 @@ export class GameEngine {
       score: scores[s as 0 | 1 | 2 | 3],
       riichi: null,
       isFuriten: false,
+      paoSeat: null,
     })) as [PlayerState, PlayerState, PlayerState, PlayerState];
 
     const sum = dealt.wall.dice[0] + dealt.wall.dice[1];
@@ -156,6 +164,11 @@ export class GameEngine {
     return actions;
   }
 
+  private isFirstTake(seat: Seat): boolean {
+    return this.state.players[seat].discards.length === 0 &&
+      this.state.players.every(p => p.melds.length === 0);
+  }
+
   private checkTsumoAgari(seat: Seat, player: PlayerState): boolean {
     if (!this.calc) return false;
     if (effectiveCount(player) !== 14) return false;
@@ -178,6 +191,7 @@ export class GameEngine {
       isHaitei: remainingDraws(this.state.wall) === 0,
       isHoutei: false,
       isChankan: false,
+      isFirstTake: this.isFirstTake(seat),
       rules: this.state.config,
     });
     return result.isAgari;
@@ -193,6 +207,7 @@ export class GameEngine {
     const seat = this.state.turn.seat;
     const drawn = drawTile(this.state.wall);
     if (!drawn) {
+      this.applyNagashiMangan();
       this.state.history.push({ kind: 'ryukyoku', reason: 'exhaustive_draw' });
       this.state.turn.phase = 'end';
       return;
@@ -433,6 +448,7 @@ export class GameEngine {
       isHaitei,
       isHoutei: false,
       isChankan: false,
+      isFirstTake: this.isFirstTake(seat),
       rules: this.state.config,
     });
 
@@ -449,9 +465,10 @@ export class GameEngine {
       return;
     }
 
-    const deltas = computeTsumoPayout(
-      seat, this.state.dealerSeat, result, this.state.round.honba, this.state.round.riichiSticks,
-    );
+    const paoSeat = player.paoSeat;
+    const deltas = paoSeat !== null
+      ? computePaoTsumoPayout(seat, paoSeat, result, this.state.round.honba, this.state.round.riichiSticks)
+      : computeTsumoPayout(seat, this.state.dealerSeat, result, this.state.round.honba, this.state.round.riichiSticks);
     for (const { seat: s, delta } of deltas) this.state.players[s].score += delta;
     this.state.round.riichiSticks = 0;
 
@@ -631,6 +648,7 @@ export class GameEngine {
       isHaitei: false,
       isHoutei: false,
       isChankan: false,
+      isFirstTake: false,
       rules: this.state.config,
     });
 
@@ -640,9 +658,10 @@ export class GameEngine {
       return;
     }
 
-    const deltas = computeTsumoPayout(
-      seat, this.state.dealerSeat, result, this.state.round.honba, this.state.round.riichiSticks,
-    );
+    const paoSeat = this.state.players[seat].paoSeat;
+    const deltas = paoSeat !== null
+      ? computePaoTsumoPayout(seat, paoSeat, result, this.state.round.honba, this.state.round.riichiSticks)
+      : computeTsumoPayout(seat, this.state.dealerSeat, result, this.state.round.honba, this.state.round.riichiSticks);
     for (const { seat: s, delta } of deltas) this.state.players[s].score += delta;
     this.state.round.riichiSticks = 0;
 
@@ -684,6 +703,7 @@ export class GameEngine {
         isHaitei: false,
         isHoutei: false,
         isChankan: true,
+        isFirstTake: false,
         rules: this.state.config,
       });
       if (result.isAgari) winners.push(s);
@@ -709,6 +729,7 @@ export class GameEngine {
     player.melds.push(meld);
 
     this.clearAllIppatsu();
+    this.checkAndSetPao(caller, discarder);
     this.state.history.push({ kind: 'meld', seat: caller, meldKind: 'pon', tiles: meldTiles });
 
     this.state.turn.seat = caller;
@@ -765,6 +786,7 @@ export class GameEngine {
     player.melds.push(meld);
 
     this.clearAllIppatsu();
+    this.checkAndSetPao(caller, discarder);
     this.state.history.push({ kind: 'meld', seat: caller, meldKind: 'daiminkan', tiles: meldTiles });
 
     this.drawRinshanAndContinue(caller);
@@ -798,11 +820,15 @@ export class GameEngine {
         isHaitei: false,
         isHoutei: remainingDraws(this.state.wall) === 0,
         isChankan,
+        isFirstTake: false,
         rules: this.state.config,
       });
 
       const sticks = winner === sticksWinner ? this.state.round.riichiSticks : 0;
-      const deltas = computeRonPayout(winner, loser, result, honba, sticks);
+      const paoSeat = p.paoSeat;
+      const deltas = paoSeat !== null
+        ? computePaoRonPayout(winner, loser, paoSeat, result, honba, sticks)
+        : computeRonPayout(winner, loser, result, honba, sticks);
       for (const { seat: s, delta } of deltas) this.state.players[s].score += delta;
 
       this.state.history.push({
@@ -893,6 +919,7 @@ export class GameEngine {
               isRinshan: false, isHaitei: false,
               isHoutei: remainingDraws(this.state.wall) === 0,
               isChankan: false,
+              isFirstTake: false,
               rules: this.state.config,
             });
             canRon = ag.isAgari;
@@ -918,6 +945,46 @@ export class GameEngine {
       this.state.turn.phase = 'call';
     } else {
       this.advanceToNextDraw(discarder);
+    }
+  }
+
+  // ---------- 包（責任払い）チェック ----------
+
+  private checkAndSetPao(caller: Seat, discarder: Seat): void {
+    const player = this.state.players[caller];
+    const DRAGONS = new Set([31, 32, 33]); // 5z=haku,6z=hatsu,7z=chun
+    const WINDS = new Set([27, 28, 29, 30]); // 1z-4z
+
+    const dragonMelds = player.melds.filter(
+      m => (m.kind === 'pon' || m.kind === 'daiminkan') && DRAGONS.has(tileKind(m.tiles[0]!))
+    ).length;
+    const windMelds = player.melds.filter(
+      m => (m.kind === 'pon' || m.kind === 'daiminkan') && WINDS.has(tileKind(m.tiles[0]!))
+    ).length;
+
+    if (dragonMelds === 3 || windMelds === 4) {
+      player.paoSeat = discarder;
+    }
+  }
+
+  // ---------- 流し満貫 ----------
+
+  private applyNagashiMangan(): void {
+    if (!this.state.config.nagashiMangan) return;
+    const YAOCHUHAI = new Set([0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33]);
+
+    for (const player of this.state.players) {
+      if (player.melds.length > 0) continue;
+      if (player.discards.length === 0) continue;
+      const allYaochuhai = player.discards.every(d => YAOCHUHAI.has(tileKind(d.tile)));
+      const noneCalledAway = player.discards.every(d => d.calledBy === null);
+      if (!allYaochuhai || !noneCalledAway) continue;
+
+      const deltas = computeNagashiManganPayout(player.seat, this.state.dealerSeat);
+      for (const { seat: s, delta } of deltas) this.state.players[s].score += delta;
+      this.state.history.push({
+        kind: 'agari', winner: player.seat, from: 'tsumo', han: 5, fu: 0, score: 8000,
+      });
     }
   }
 
