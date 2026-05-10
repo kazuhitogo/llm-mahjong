@@ -116,11 +116,14 @@ export type GamePhase =
 /** call phase での鳴き待ちエントリ */
 export interface PendingCall {
   seat: Seat;
-  /** ロン宣言可能か (フリテンなし・和了形成) */
   canRon: boolean;
-  /** 応答済みか */
+  canPon: boolean;
+  canDaiminkan: boolean;
+  canChi: boolean;
   responded: boolean;
-  response: 'ron' | 'pass' | null;
+  response: 'ron' | 'pon' | 'daiminkan' | 'chi' | 'pass' | null;
+  /** pon/chi 選択時の手牌 2 枚 */
+  responseDetails?: { tiles: [Tile, Tile] };
 }
 
 /** 局全体の状態 */
@@ -142,11 +145,10 @@ export interface GameState {
   };
   wall: WallState;
   players: [PlayerState, PlayerState, PlayerState, PlayerState];
-  /** call phase での応答待ちプレイヤー */
   pendingCalls: PendingCall[];
-  /** イベントログ */
+  /** チー後の打牌禁止牌種 (TileKind 値)。打牌後クリア */
+  chiKuikaeKinds: number[];
   history: GameEvent[];
-  /** 山生成に使った乱数 seed */
   rngSeed: number;
 }
 
@@ -160,4 +162,6 @@ export type GameEvent =
   | { kind: 'riichi'; seat: Seat; tile: Tile; junme: number }
   | { kind: 'violation'; seat: Seat; attempted: Action; reason: string; replacement: Action }
   | { kind: 'ryukyoku'; reason: string }
+  | { kind: 'meld'; seat: Seat; meldKind: 'pon' | 'chi' | 'daiminkan' | 'ankan' | 'kakan'; tiles: Tile[] }
+  | { kind: 'rinshan'; seat: Seat; tile: Tile }
   | { kind: 'agari'; winner: Seat; from: Seat | 'tsumo'; han: number; fu: number; score: number };

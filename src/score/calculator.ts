@@ -129,25 +129,30 @@ export class RiichiRsCalculator implements ScoreCalculator {
     const closedPart = input.closedHand.map(tileToRs);
     const tileDiscardedBySomeone = input.isTsumo ? -1 : tileToRs(input.winTile);
 
-    const result = _rsCalc({
-      closed_part: closedPart,
-      open_part: input.openMelds.map(meldToRs),
-      options: {
-        dora: doras,
-        aka_count: aka,
-        riichi: input.isRiichi,
-        ippatsu: input.isIppatsu,
-        double_riichi: input.isDoubleRiichi,
-        after_kan: input.isRinshan || input.isChankan,
-        tile_discarded_by_someone: tileDiscardedBySomeone,
-        bakaze: windToRs(input.roundWind),
-        jikaze: windToRs(input.seatWind),
-        allow_aka: input.rules.redDora,
-        allow_kuitan: input.rules.openTanyao,
-        last_tile: input.isHaitei || input.isHoutei,
-      },
-      calc_hairi: false,
-    });
+    let result: ReturnType<typeof _rsCalc>;
+    try {
+      result = _rsCalc({
+        closed_part: closedPart,
+        open_part: input.openMelds.map(meldToRs),
+        options: {
+          dora: doras,
+          aka_count: aka,
+          riichi: input.isRiichi,
+          ippatsu: input.isIppatsu,
+          double_riichi: input.isDoubleRiichi,
+          after_kan: input.isRinshan || input.isChankan,
+          tile_discarded_by_someone: tileDiscardedBySomeone,
+          bakaze: windToRs(input.roundWind),
+          jikaze: windToRs(input.seatWind),
+          allow_aka: input.rules.redDora,
+          allow_kuitan: input.rules.openTanyao,
+          last_tile: input.isHaitei || input.isHoutei,
+        },
+        calc_hairi: false,
+      });
+    } catch {
+      return { isAgari: false, han: 0, fu: 0, score: 0, outgoingScore: 0, yakuman: false, yaku: {} };
+    }
 
     return {
       isAgari: result.is_agari,

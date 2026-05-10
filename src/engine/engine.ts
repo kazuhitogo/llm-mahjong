@@ -6,19 +6,34 @@ import type {
   DiscardEntry,
   PendingCall,
 } from '../types/state.js';
-import type { Tile, TileId } from '../types/tile.js';
+import type { Tile, TileId, TileKind } from '../types/tile.js';
+import type { Meld } from '../types/meld.js';
 import type { Seat } from '../types/seat.js';
 import type { Action } from '../types/action.js';
 import type { ScoreCalculator } from '../score/calculator.js';
 import { DEFAULT_RULES } from '../types/state.js';
-import { dealWall, drawTile, remainingDraws, getDoraIndicators, getUraDoraIndicators } from '../wall/wall.js';
-import { sortTiles, tileIdToTile, tileKind } from '../tiles/tile.js';
+import {
+  dealWall,
+  drawTile,
+  remainingDraws,
+  getDoraIndicators,
+  getUraDoraIndicators,
+  rinshanTileId,
+  deadWallTileId,
+} from '../wall/wall.js';
+import { sortTiles, tileIdToTile, tileKind, kindToTile } from '../tiles/tile.js';
 import { seatWind, nextSeat } from '../types/seat.js';
 import {
   getDiscardCandidates,
   getCallCandidates,
   fallbackAction,
   isLegalDiscard,
+  ponCandidates,
+  chiCandidates,
+  daiminkanCandidate,
+  ankanCandidates,
+  kakanCandidates,
+  effectiveCount,
 } from './legal.js';
 import {
   isSelfDiscardFuriten,
@@ -33,7 +48,6 @@ export interface EngineOptions {
   dealerSeat?: Seat;
   round?: { wind: 'E' | 'S'; kyoku: 1 | 2 | 3 | 4; honba: number; riichiSticks: number };
   initialScores?: [number, number, number, number];
-  /** Phase 2a: 役判定・点数計算。未指定時は打牌のみ (Phase 1 互換) */
   calculator?: ScoreCalculator;
 }
 
@@ -75,6 +89,7 @@ export class GameEngine {
       wall: dealt.wall,
       players,
       pendingCalls: [],
+      chiKuikaeKinds: [],
       history: [
         { kind: 'init', rngSeed: opts.rngSeed, round, dealerSeat },
         {
@@ -100,7 +115,9 @@ export class GameEngine {
     const phase = this.state.turn.phase;
 
     if (phase === 'call') {
-      return getCallCandidates(this.state, seat);
+      const discardedTile = this.lastDiscardedTile();
+      if (!discardedTile) return [];
+      return getCallCandidates(this.state, seat, discardedTile);
     }
 
     if (phase !== 'discard' || this.state.turn.seat !== seat) return [];
@@ -108,56 +125,13 @@ export class GameEngine {
     const player = this.state.players[seat];
     const actions: Action[] = [];
 
-    // tsumo 判定 (calculator 必要)
-    if (this.calc && !player.riichi) {
-      const tsumoResult = this.calc.calculateAgari({
-        closedHand: player.hand,
-        openMelds: player.melds,
-        winTile: player.hand[player.hand.length - 1]!,
-        isTsumo: true,
-        seatWind: seatWind(seat, this.state.dealerSeat),
-        roundWind: this.state.round.wind,
-        doraIndicators: getDoraIndicators(this.state.wall, this.state.config.redDora),
-        uraDoraIndicators: [],
-        isRiichi: false,
-        isIppatsu: false,
-        isDoubleRiichi: false,
-        isRinshan: false,
-        isHaitei: remainingDraws(this.state.wall) === 0,
-        isHoutei: false,
-        isChankan: false,
-        rules: this.state.config,
-      });
-      if (tsumoResult.isAgari) {
-        actions.push({ kind: 'tsumo' });
-      }
-    }
-    // リーチ中ツモ
-    if (this.calc && player.riichi) {
-      const tsumoResult = this.calc.calculateAgari({
-        closedHand: player.hand,
-        openMelds: player.melds,
-        winTile: player.hand[player.hand.length - 1]!,
-        isTsumo: true,
-        seatWind: seatWind(seat, this.state.dealerSeat),
-        roundWind: this.state.round.wind,
-        doraIndicators: getDoraIndicators(this.state.wall, this.state.config.redDora),
-        uraDoraIndicators: player.isFuriten ? [] : getUraDoraIndicators(this.state.wall, this.state.config.redDora),
-        isRiichi: true,
-        isIppatsu: player.riichi.ippatsu,
-        isDoubleRiichi: player.riichi.isDouble,
-        isRinshan: false,
-        isHaitei: remainingDraws(this.state.wall) === 0,
-        isHoutei: false,
-        isChankan: false,
-        rules: this.state.config,
-      });
-      if (tsumoResult.isAgari) {
-        actions.push({ kind: 'tsumo' });
-      }
+    // ツモ和了 (calculator あり)
+    if (this.calc) {
+      const isTsumoAgari = this.checkTsumoAgari(seat, player);
+      if (isTsumoAgari) actions.push({ kind: 'tsumo' });
     }
 
-    // リーチ宣言候補 (calculator 必要、未リーチ、score >= 1000)
+    // リーチ宣言 (未リーチ・score >= 1000)
     if (this.calc && !player.riichi && player.score >= 1000) {
       const candidates = this.calc.riichiCandidates(player.hand, player.melds);
       for (const { discard } of candidates) {
@@ -165,10 +139,43 @@ export class GameEngine {
       }
     }
 
-    // 打牌候補
+    // 暗槓 / 加槓 (calculator あり)
+    if (this.calc) {
+      for (const a of ankanCandidates(player)) actions.push(a);
+      for (const a of kakanCandidates(player)) actions.push(a);
+    }
+
+    // 打牌
     actions.push(...getDiscardCandidates(this.state, seat));
 
     return actions;
+  }
+
+  private checkTsumoAgari(seat: Seat, player: PlayerState): boolean {
+    if (!this.calc) return false;
+    if (effectiveCount(player) !== 14) return false;
+    const winTile = player.hand[player.hand.length - 1]!;
+    const result = this.calc.calculateAgari({
+      closedHand: player.hand,
+      openMelds: player.melds,
+      winTile,
+      isTsumo: true,
+      seatWind: seatWind(seat, this.state.dealerSeat),
+      roundWind: this.state.round.wind,
+      doraIndicators: getDoraIndicators(this.state.wall, this.state.config.redDora),
+      uraDoraIndicators: player.riichi
+        ? getUraDoraIndicators(this.state.wall, this.state.config.redDora)
+        : [],
+      isRiichi: !!player.riichi,
+      isIppatsu: player.riichi?.ippatsu ?? false,
+      isDoubleRiichi: player.riichi?.isDouble ?? false,
+      isRinshan: false,
+      isHaitei: remainingDraws(this.state.wall) === 0,
+      isHoutei: false,
+      isChankan: false,
+      rules: this.state.config,
+    });
+    return result.isAgari;
   }
 
   step(): void {
@@ -188,22 +195,21 @@ export class GameEngine {
     const tile = tileIdToTile(drawn.tile, this.state.config.redDora);
     this.lastDrawnId = drawn.tile;
     this.state.wall = drawn.wall;
-    const player = this.state.players[seat];
 
-    // ツモ牌を手牌末尾に置く
-    player.hand = [...sortTiles(player.hand.slice(0, 13)), tile];
+    const player = this.state.players[seat];
+    player.hand = [...sortTiles(player.hand.slice(0, player.hand.length)), tile];
 
     // 同巡フリテン解除 (リーチ後永続フリテンは維持)
-    if (!player.riichi || !player.isFuriten) {
-      const waits = this.calc ? this.calc.waitTiles(player.hand.slice(0, 13), player.melds) : [];
-      this.state.players[seat] = resetSameTurnFuriten(player, waits);
+    if (this.calc && !(player.riichi && player.isFuriten)) {
+      const waits = this.calc.waitTiles(player.hand.slice(0, -1), player.melds);
+      this.state.players[seat] = resetSameTurnFuriten(this.state.players[seat], waits);
     }
 
-    // 一発フラグを消す (自分がツモると一発消滅)
+    // 自分のドロー → 自分の ippatsu を消す
     if (player.riichi?.ippatsu) {
       this.state.players[seat] = {
         ...this.state.players[seat],
-        riichi: { ...player.riichi!, ippatsu: false },
+        riichi: { ...this.state.players[seat].riichi!, ippatsu: false },
       };
     }
 
@@ -232,22 +238,17 @@ export class GameEngine {
     }
 
     if (action.kind === 'riichi') {
-      // リーチ宣言の合法性チェック
-      const player = this.state.players[seat];
-      if (player.riichi) {
-        // 既にリーチ中 → 違反 → ツモ切り
-        const replacement = fallbackAction(this.state, seat);
-        this.state.history.push({
-          kind: 'violation',
-          seat,
-          attempted: action,
-          reason: 'already in riichi',
-          replacement,
-        });
-        this.doDiscard(seat, replacement.tile, true);
-        return;
-      }
       this.doRiichiDeclaration(seat, action.tile);
+      return;
+    }
+
+    if (action.kind === 'ankan') {
+      this.doAnkan(seat, action.tile);
+      return;
+    }
+
+    if (action.kind === 'kakan') {
+      this.doKakan(seat, action.tile);
       return;
     }
 
@@ -258,7 +259,7 @@ export class GameEngine {
           kind: 'violation',
           seat,
           attempted: action,
-          reason: `tile "${action.tile}" not in hand`,
+          reason: `tile "${action.tile}" not in hand or kuikae`,
           replacement,
         });
         this.doDiscard(seat, replacement.tile, true);
@@ -269,13 +270,13 @@ export class GameEngine {
       return;
     }
 
-    // その他のアクション (Phase 1 互換: 違反として強制ツモ切り)
+    // 違反
     const replacement = fallbackAction(this.state, seat);
     this.state.history.push({
       kind: 'violation',
       seat,
       attempted: action,
-      reason: `action "${action.kind}" not supported in current phase`,
+      reason: `action "${action.kind}" not supported`,
       replacement,
     });
     this.doDiscard(seat, replacement.tile, true);
@@ -285,80 +286,113 @@ export class GameEngine {
     const pending = this.state.pendingCalls.find(p => p.seat === seat && !p.responded);
     if (!pending) return;
 
-    if (action.kind === 'ron') {
-      if (!pending.canRon) {
-        // フリテン等で実際にロンできない → パス扱い
+    switch (action.kind) {
+      case 'ron':
+        if (!pending.canRon) {
+          pending.responded = true;
+          pending.response = 'pass';
+        } else {
+          pending.responded = true;
+          pending.response = 'ron';
+        }
+        break;
+      case 'pon':
+        if (!pending.canPon) {
+          pending.responded = true;
+          pending.response = 'pass';
+        } else {
+          pending.responded = true;
+          pending.response = 'pon';
+          pending.responseDetails = { tiles: action.tiles };
+        }
+        break;
+      case 'daiminkan':
+        if (!pending.canDaiminkan) {
+          pending.responded = true;
+          pending.response = 'pass';
+        } else {
+          pending.responded = true;
+          pending.response = 'daiminkan';
+        }
+        break;
+      case 'chi':
+        if (!pending.canChi) {
+          pending.responded = true;
+          pending.response = 'pass';
+        } else {
+          pending.responded = true;
+          pending.response = 'chi';
+          pending.responseDetails = { tiles: action.tiles };
+        }
+        break;
+      default:
+        // pass または不正
+        if (pending.canRon) {
+          this.state.players[seat] = applyPassFuriten(
+            this.state.players[seat],
+            this.lastDiscardedTile()!,
+          );
+        }
         pending.responded = true;
         pending.response = 'pass';
-      } else {
-        pending.responded = true;
-        pending.response = 'ron';
-      }
-    } else {
-      // pass (または不正アクション)
-      if (pending.canRon) {
-        // パスしたのでフリテン
-        this.state.players[seat] = applyPassFuriten(this.state.players[seat], this.lastDiscardedTile()!);
-      }
-      pending.responded = true;
-      pending.response = 'pass';
+        break;
     }
 
-    // 全員応答済みか確認
-    const allResponded = this.state.pendingCalls.every(p => p.responded);
-    if (allResponded) {
+    if (this.state.pendingCalls.every(p => p.responded)) {
       this.resolveCallPhase();
     }
   }
 
-  private lastDiscardedTile(): Tile | null {
-    for (let i = this.state.history.length - 1; i >= 0; i--) {
-      const ev = this.state.history[i]!;
-      if (ev.kind === 'action' && ev.action.kind === 'discard') {
-        return ev.action.tile;
-      }
-      if (ev.kind === 'riichi') {
-        return ev.tile;
-      }
-    }
-    return null;
-  }
-
   private resolveCallPhase(): void {
-    const ronners = this.state.pendingCalls
-      .filter(p => p.response === 'ron')
-      .map(p => p.seat);
-
+    const calls = this.state.pendingCalls;
     this.state.pendingCalls = [];
 
+    const discarder = this.lastDiscardTurn();
+    const discardedTile = this.lastDiscardedTile()!;
+
+    // 優先度: ロン > ポン/大明槓 > チー
+    const ronners = calls.filter(p => p.response === 'ron').map(p => p.seat);
     if (ronners.length > 0) {
-      // 放銃者は直前の打牌プレイヤー
-      const loser = this.lastDiscardTurn();
-      const discardedTile = this.lastDiscardedTile()!;
-      this.doRon(ronners, loser, discardedTile);
-    } else {
-      // 全員パス → 次のプレイヤーへ
-      this.advanceToNextDraw();
+      this.doRon(ronners, discarder, discardedTile);
+      return;
+    }
+
+    const ponner = calls.find(p => p.response === 'pon');
+    const daiminkanCaller = calls.find(p => p.response === 'daiminkan');
+    const pondmk = ponner ?? daiminkanCaller;
+    if (pondmk) {
+      // calledBy をセット
+      this.markDiscardCalled(discarder, pondmk.seat);
+      if (pondmk.response === 'pon') {
+        this.doPon(pondmk.seat, pondmk.responseDetails!.tiles, discardedTile, discarder);
+      } else {
+        this.doDaiminkan(pondmk.seat, discardedTile, discarder);
+      }
+      return;
+    }
+
+    const chier = calls.find(p => p.response === 'chi');
+    if (chier) {
+      this.markDiscardCalled(discarder, chier.seat);
+      this.doChi(chier.seat, chier.responseDetails!.tiles, discardedTile, discarder);
+      return;
+    }
+
+    // 全員パス → 次のツモへ
+    this.advanceToNextDraw(discarder);
+  }
+
+  private markDiscardCalled(discarder: Seat, caller: Seat): void {
+    const discards = this.state.players[discarder].discards;
+    if (discards.length > 0) {
+      discards[discards.length - 1]!.calledBy = caller;
     }
   }
 
-  private lastDiscardTurn(): Seat {
-    for (let i = this.state.history.length - 1; i >= 0; i--) {
-      const ev = this.state.history[i]!;
-      if (ev.kind === 'action' && (ev.action.kind === 'discard' || ev.action.kind === 'riichi')) {
-        return ev.seat;
-      }
-      if (ev.kind === 'riichi') {
-        return ev.seat;
-      }
-    }
-    throw new Error('resolveCallPhase: no discard found in history');
-  }
+  // ---------- ツモ和了 ----------
 
   private doTsumo(seat: Seat): void {
-    if (!this.calc) {
-      throw new Error('doTsumo: no calculator');
-    }
+    if (!this.calc) throw new Error('doTsumo: no calculator');
     const player = this.state.players[seat];
     const winTile = player.hand[player.hand.length - 1]!;
     const isHaitei = remainingDraws(this.state.wall) === 0;
@@ -387,13 +421,12 @@ export class GameEngine {
     });
 
     if (!result.isAgari) {
-      // 計算上和了でない → 強制ツモ切り
       const replacement = fallbackAction(this.state, seat);
       this.state.history.push({
         kind: 'violation',
         seat,
         attempted: { kind: 'tsumo' },
-        reason: 'tsumo: hand is not agari',
+        reason: 'tsumo: not agari',
         replacement,
       });
       this.doDiscard(seat, replacement.tile, true);
@@ -401,39 +434,29 @@ export class GameEngine {
     }
 
     const deltas = computeTsumoPayout(
-      seat,
-      this.state.dealerSeat,
-      result,
-      this.state.round.honba,
-      this.state.round.riichiSticks,
+      seat, this.state.dealerSeat, result, this.state.round.honba, this.state.round.riichiSticks,
     );
-    for (const { seat: s, delta } of deltas) {
-      this.state.players[s].score += delta;
-    }
+    for (const { seat: s, delta } of deltas) this.state.players[s].score += delta;
     this.state.round.riichiSticks = 0;
 
     this.state.history.push({
-      kind: 'agari',
-      winner: seat,
-      from: 'tsumo',
-      han: result.han,
-      fu: result.fu,
-      score: result.score,
+      kind: 'agari', winner: seat, from: 'tsumo',
+      han: result.han, fu: result.fu, score: result.score,
     });
     this.state.turn.phase = 'end';
   }
 
+  // ---------- リーチ宣言 ----------
+
   private doRiichiDeclaration(seat: Seat, tile: Tile): void {
     const player = this.state.players[seat];
 
-    // 宣言牌が手牌にあるか確認
-    if (!player.hand.some(t => t === tile)) {
+    if (player.riichi || !player.hand.some(t => t === tile)) {
       const replacement = fallbackAction(this.state, seat);
       this.state.history.push({
-        kind: 'violation',
-        seat,
+        kind: 'violation', seat,
         attempted: { kind: 'riichi', tile },
-        reason: `riichi tile "${tile}" not in hand`,
+        reason: 'riichi: invalid',
         replacement,
       });
       this.doDiscard(seat, replacement.tile, true);
@@ -441,119 +464,292 @@ export class GameEngine {
     }
 
     const isDouble = this.state.turn.junme === 0 && player.discards.length === 0;
-
-    // リーチ棒
     player.score -= 1000;
     this.state.round.riichiSticks += 1;
 
-    // リーチ状態セット
     this.state.players[seat] = {
-      ...player,
-      score: player.score, // already decremented
-      riichi: {
-        declared: true,
-        junme: this.state.turn.junme,
-        isDouble,
-        ippatsu: true,
-      },
+      ...this.state.players[seat],
+      score: player.score,
+      riichi: { declared: true, junme: this.state.turn.junme, isDouble, ippatsu: true },
     };
 
-    this.state.history.push({
-      kind: 'riichi',
-      seat,
-      tile,
-      junme: this.state.turn.junme,
-    });
-
+    this.state.history.push({ kind: 'riichi', seat, tile, junme: this.state.turn.junme });
     this.doDiscard(seat, tile, false, true);
   }
 
-  private doDiscard(seat: Seat, t: Tile, tsumogiri: boolean, isRiichiDeclaration = false): void {
+  // ---------- 暗槓 ----------
+
+  private doAnkan(seat: Seat, tileRep: Tile): void {
     const player = this.state.players[seat];
-    const idx = player.hand.findIndex((x) => x === t);
-    if (idx < 0) throw new Error(`doDiscard: tile "${t}" not in hand`);
+    const kind = tileKind(tileRep) as TileKind;
+    const matching = player.hand.filter(t => tileKind(t) === kind);
+    if (matching.length < 4) {
+      const replacement = fallbackAction(this.state, seat);
+      this.state.history.push({
+        kind: 'violation', seat, attempted: { kind: 'ankan', tile: tileRep },
+        reason: 'ankan: need 4 tiles', replacement,
+      });
+      this.doDiscard(seat, replacement.tile, true);
+      return;
+    }
 
-    player.hand = [...player.hand.slice(0, idx), ...player.hand.slice(idx + 1)];
-    player.hand = sortTiles(player.hand);
+    const kanTiles = matching.slice(0, 4);
+    player.hand = player.hand.filter(t => !kanTiles.includes(t));
+    const meld: Meld = { kind: 'ankan', tiles: kanTiles, from: seat, calledTile: null };
+    player.melds.push(meld);
 
-    // 一発フラグを消す (自分が打牌すると他者の一発も消える)
-    for (const p of this.state.players) {
-      if (p.riichi?.ippatsu) {
-        this.state.players[p.seat] = {
-          ...p,
-          riichi: { ...p.riichi!, ippatsu: false },
-        };
+    this.clearAllIppatsu();
+    this.state.history.push({ kind: 'meld', seat, meldKind: 'ankan', tiles: kanTiles });
+
+    // 搶槓チェック (暗槓は搶槓なし)
+    this.drawRinshanAndContinue(seat, false);
+  }
+
+  // ---------- 加槓 ----------
+
+  private doKakan(seat: Seat, tileRep: Tile): void {
+    const player = this.state.players[seat];
+    const kind = tileKind(tileRep) as TileKind;
+
+    // ポン副露を探す
+    const ponMeldIdx = player.melds.findIndex(m => m.kind === 'pon' && tileKind(m.tiles[0]!) === kind);
+    const extraTileIdx = player.hand.findIndex(t => tileKind(t) === kind);
+
+    if (ponMeldIdx < 0 || extraTileIdx < 0) {
+      const replacement = fallbackAction(this.state, seat);
+      this.state.history.push({
+        kind: 'violation', seat, attempted: { kind: 'kakan', tile: tileRep },
+        reason: 'kakan: no pon meld or no extra tile', replacement,
+      });
+      this.doDiscard(seat, replacement.tile, true);
+      return;
+    }
+
+    const extraTile = player.hand[extraTileIdx]!;
+    player.hand = [...player.hand.slice(0, extraTileIdx), ...player.hand.slice(extraTileIdx + 1)];
+
+    const ponMeld = player.melds[ponMeldIdx]!;
+    const kakanTiles = [...ponMeld.tiles, extraTile];
+    player.melds[ponMeldIdx] = { ...ponMeld, kind: 'kakan', tiles: kakanTiles };
+
+    this.clearAllIppatsu();
+    this.state.history.push({ kind: 'meld', seat, meldKind: 'kakan', tiles: kakanTiles });
+
+    // 搶槓チェック: 加槓牌で他プレイヤーがロンできるか
+    if (this.calc) {
+      const chankanRonners = this.checkChankan(seat, extraTile);
+      if (chankanRonners.length > 0) {
+        this.doRon(chankanRonners, seat, extraTile, true);
+        return;
       }
     }
 
-    const entry: DiscardEntry = {
-      tile: t,
-      junme: this.state.turn.junme + 1,
-      tsumogiri,
-      isRiichiDeclaration,
-      calledBy: null,
-    };
-    player.discards.push(entry);
+    this.drawRinshanAndContinue(seat, false);
+  }
 
-    this.state.history.push({
-      kind: 'action',
-      seat,
-      action: { kind: 'discard', tile: t, tsumogiri },
+  // ---------- 嶺上ツモ ----------
+
+  private drawRinshanAndContinue(seat: Seat, isRinshanAgari: boolean): void {
+    const kanCount = this.state.wall.doraIndicatorCount - 1; // 0-indexed
+    if (kanCount >= 4) {
+      // 四開槓: Phase 2c で処理。暫定で次ツモへ
+      this.advanceToNextDraw(seat);
+      return;
+    }
+
+    const rinshanId = rinshanTileId(this.state.wall, kanCount);
+    const tile = tileIdToTile(rinshanId, this.state.config.redDora);
+
+    // ドラ表示牌をめくる
+    this.state.wall = {
+      ...this.state.wall,
+      doraIndicatorCount: this.state.wall.doraIndicatorCount + 1,
+    };
+
+    this.lastDrawnId = rinshanId;
+
+    const player = this.state.players[seat];
+    player.hand = [...sortTiles(player.hand), tile];
+
+    this.state.history.push({ kind: 'rinshan', seat, tile });
+
+    // 嶺上ツモ和了チェック
+    if (this.calc && this.checkTsumoAgari(seat, player)) {
+      // isRinshan フラグを立てて和了計算
+      this.doTsumoRinshan(seat, tile);
+      return;
+    }
+
+    this.state.turn.seat = seat;
+    this.state.turn.phase = 'discard';
+  }
+
+  private doTsumoRinshan(seat: Seat, winTile: Tile): void {
+    if (!this.calc) return;
+    const player = this.state.players[seat];
+
+    const uraDoraIndicators = player.riichi
+      ? getUraDoraIndicators(this.state.wall, this.state.config.redDora)
+      : [];
+
+    const result = this.calc.calculateAgari({
+      closedHand: player.hand,
+      openMelds: player.melds,
+      winTile,
+      isTsumo: true,
+      seatWind: seatWind(seat, this.state.dealerSeat),
+      roundWind: this.state.round.wind,
+      doraIndicators: getDoraIndicators(this.state.wall, this.state.config.redDora),
+      uraDoraIndicators,
+      isRiichi: !!player.riichi,
+      isIppatsu: player.riichi?.ippatsu ?? false,
+      isDoubleRiichi: player.riichi?.isDouble ?? false,
+      isRinshan: true,
+      isHaitei: false,
+      isHoutei: false,
+      isChankan: false,
+      rules: this.state.config,
     });
 
-    this.lastDrawnId = null;
-
-    // junme 更新
-    const next = nextSeat(seat);
-    if (next === this.state.dealerSeat) {
-      this.state.turn.junme += 1;
+    if (!result.isAgari) {
+      this.state.turn.seat = seat;
+      this.state.turn.phase = 'discard';
+      return;
     }
 
-    // call phase へ (calculator あり)
-    if (this.calc) {
-      this.enterCallPhase(seat, t);
-    } else {
-      this.state.turn.seat = next;
-      this.state.turn.phase = 'draw';
-    }
+    const deltas = computeTsumoPayout(
+      seat, this.state.dealerSeat, result, this.state.round.honba, this.state.round.riichiSticks,
+    );
+    for (const { seat: s, delta } of deltas) this.state.players[s].score += delta;
+    this.state.round.riichiSticks = 0;
+
+    this.state.history.push({
+      kind: 'agari', winner: seat, from: 'tsumo',
+      han: result.han, fu: result.fu, score: result.score,
+    });
+    this.state.turn.phase = 'end';
   }
 
-  private enterCallPhase(discarder: Seat, discardedTile: Tile): void {
-    const pendingCalls: PendingCall[] = [];
+  // ---------- 搶槓チェック ----------
 
+  private checkChankan(kanerSeat: Seat, kakanTile: Tile): Seat[] {
+    const winners: Seat[] = [];
     for (let i = 1; i <= 3; i++) {
-      const s = ((discarder + i) % 4) as Seat;
+      const s = ((kanerSeat + i) % 4) as Seat;
       const p = this.state.players[s];
-      if (p.hand.length !== 13) continue;
+      if (p.isFuriten) continue;
 
       const waits = this.calc!.waitTiles(p.hand, p.melds);
-      const discardKind = tileKind(discardedTile);
-      const isInWaits = waits.some(w => tileKind(w) === discardKind);
+      const k = tileKind(kakanTile);
+      if (!waits.some(w => tileKind(w) === k)) continue;
+      if (isSelfDiscardFuriten(p, waits)) continue;
 
-      if (!isInWaits) continue;
-
-      const furiten = p.isFuriten || isSelfDiscardFuriten(p, waits);
-      if (furiten) {
-        // フリテン → ロン不可 (isFuriten を更新)
-        if (!p.isFuriten) {
-          this.state.players[s] = { ...p, isFuriten: true };
-        }
-        continue;
-      }
-
-      // ロン可能 → 応答待ちに追加
-      pendingCalls.push({ seat: s, canRon: true, responded: false, response: null });
+      const result = this.calc!.calculateAgari({
+        closedHand: p.hand,
+        openMelds: p.melds,
+        winTile: kakanTile,
+        isTsumo: false,
+        seatWind: seatWind(s, this.state.dealerSeat),
+        roundWind: this.state.round.wind,
+        doraIndicators: getDoraIndicators(this.state.wall, this.state.config.redDora),
+        uraDoraIndicators: p.riichi
+          ? getUraDoraIndicators(this.state.wall, this.state.config.redDora) : [],
+        isRiichi: !!p.riichi,
+        isIppatsu: false,
+        isDoubleRiichi: false,
+        isRinshan: false,
+        isHaitei: false,
+        isHoutei: false,
+        isChankan: true,
+        rules: this.state.config,
+      });
+      if (result.isAgari) winners.push(s);
     }
-
-    if (pendingCalls.length > 0) {
-      this.state.pendingCalls = pendingCalls;
-      this.state.turn.phase = 'call';
-    } else {
-      this.advanceToNextDraw();
-    }
+    return winners;
   }
 
-  private doRon(winners: Seat[], loser: Seat, discardedTile: Tile): void {
+  // ---------- ポン ----------
+
+  private doPon(caller: Seat, handTiles: [Tile, Tile], discardedTile: Tile, discarder: Seat): void {
+    const player = this.state.players[caller];
+
+    // 手牌から 2 枚除去
+    let hand = [...player.hand];
+    for (const t of handTiles) {
+      const idx = hand.indexOf(t);
+      if (idx >= 0) hand.splice(idx, 1);
+    }
+    player.hand = sortTiles(hand);
+
+    const meldTiles = [...handTiles, discardedTile] as [Tile, Tile, Tile];
+    const meld: Meld = { kind: 'pon', tiles: meldTiles, from: discarder, calledTile: discardedTile };
+    player.melds.push(meld);
+
+    this.clearAllIppatsu();
+    this.state.history.push({ kind: 'meld', seat: caller, meldKind: 'pon', tiles: meldTiles });
+
+    this.state.turn.seat = caller;
+    this.state.turn.phase = 'discard';
+    this.state.chiKuikaeKinds = [];
+    this.lastDrawnId = null;
+  }
+
+  // ---------- チー ----------
+
+  private doChi(caller: Seat, handTiles: [Tile, Tile], discardedTile: Tile, discarder: Seat): void {
+    const player = this.state.players[caller];
+
+    let hand = [...player.hand];
+    for (const t of handTiles) {
+      const idx = hand.indexOf(t);
+      if (idx >= 0) hand.splice(idx, 1);
+    }
+    player.hand = sortTiles(hand);
+
+    const meldTiles = [...handTiles, discardedTile] as [Tile, Tile, Tile];
+    const meld: Meld = { kind: 'chi', tiles: meldTiles, from: discarder, calledTile: discardedTile };
+    player.melds.push(meld);
+
+    this.clearAllIppatsu();
+    this.state.history.push({ kind: 'meld', seat: caller, meldKind: 'chi', tiles: meldTiles });
+
+    // 喰い替え禁止: チー牌と同種を打牌禁止
+    this.state.chiKuikaeKinds = [tileKind(discardedTile)];
+
+    this.state.turn.seat = caller;
+    this.state.turn.phase = 'discard';
+    this.lastDrawnId = null;
+  }
+
+  // ---------- 大明槓 ----------
+
+  private doDaiminkan(caller: Seat, discardedTile: Tile, discarder: Seat): void {
+    const player = this.state.players[caller];
+    const kind = tileKind(discardedTile);
+
+    const matching = player.hand.filter(t => tileKind(t) === kind).slice(0, 3);
+    let hand = [...player.hand];
+    for (const t of matching) {
+      const idx = hand.indexOf(t);
+      if (idx >= 0) hand.splice(idx, 1);
+    }
+    player.hand = sortTiles(hand);
+
+    const meldTiles = [...matching, discardedTile] as Tile[];
+    const meld: Meld = {
+      kind: 'daiminkan', tiles: meldTiles, from: discarder, calledTile: discardedTile,
+    };
+    player.melds.push(meld);
+
+    this.clearAllIppatsu();
+    this.state.history.push({ kind: 'meld', seat: caller, meldKind: 'daiminkan', tiles: meldTiles });
+
+    this.drawRinshanAndContinue(caller, false);
+  }
+
+  // ---------- ロン ----------
+
+  private doRon(winners: Seat[], loser: Seat, discardedTile: Tile, isChankan = false): void {
     const sticksWinner = riichiSticksWinner(winners, loser);
     const honba = this.state.round.honba;
 
@@ -578,23 +774,17 @@ export class GameEngine {
         isRinshan: false,
         isHaitei: false,
         isHoutei: remainingDraws(this.state.wall) === 0,
-        isChankan: false,
+        isChankan,
         rules: this.state.config,
       });
 
       const sticks = winner === sticksWinner ? this.state.round.riichiSticks : 0;
       const deltas = computeRonPayout(winner, loser, result, honba, sticks);
-      for (const { seat: s, delta } of deltas) {
-        this.state.players[s].score += delta;
-      }
+      for (const { seat: s, delta } of deltas) this.state.players[s].score += delta;
 
       this.state.history.push({
-        kind: 'agari',
-        winner,
-        from: loser,
-        han: result.han,
-        fu: result.fu,
-        score: result.score,
+        kind: 'agari', winner, from: loser,
+        han: result.han, fu: result.fu, score: result.score,
       });
     }
 
@@ -602,12 +792,139 @@ export class GameEngine {
     this.state.turn.phase = 'end';
   }
 
-  private advanceToNextDraw(): void {
-    // 次のプレイヤーへ (doDiscard 内で junme は既に更新済み)
-    const discarder = this.lastDiscardTurn();
-    const next = nextSeat(discarder);
-    this.state.turn.seat = next;
+  // ---------- 打牌 ----------
+
+  private doDiscard(seat: Seat, t: Tile, tsumogiri: boolean, isRiichiDeclaration = false): void {
+    const player = this.state.players[seat];
+    const idx = player.hand.findIndex((x) => x === t);
+    if (idx < 0) throw new Error(`doDiscard: tile "${t}" not in hand`);
+
+    player.hand = [...player.hand.slice(0, idx), ...player.hand.slice(idx + 1)];
+    player.hand = sortTiles(player.hand);
+
+    const entry: DiscardEntry = {
+      tile: t,
+      junme: this.state.turn.junme + 1,
+      tsumogiri,
+      isRiichiDeclaration,
+      calledBy: null,
+    };
+    player.discards.push(entry);
+
+    this.state.chiKuikaeKinds = [];
+    this.state.history.push({ kind: 'action', seat, action: { kind: 'discard', tile: t, tsumogiri } });
+    this.lastDrawnId = null;
+
+    // junme 更新
+    const next = nextSeat(seat);
+    if (next === this.state.dealerSeat) {
+      this.state.turn.junme += 1;
+    }
+
+    if (this.calc) {
+      this.enterCallPhase(seat, t);
+    } else {
+      this.state.turn.seat = next;
+      this.state.turn.phase = 'draw';
+    }
+  }
+
+  // ---------- call phase 入口 ----------
+
+  private enterCallPhase(discarder: Seat, discardedTile: Tile): void {
+    const pendingCalls: PendingCall[] = [];
+    const k = tileKind(discardedTile);
+
+    for (let i = 1; i <= 3; i++) {
+      const s = ((discarder + i) % 4) as Seat;
+      const p = this.state.players[s];
+
+      // ロン判定
+      let canRon = false;
+      {
+        const waits = this.calc!.waitTiles(p.hand, p.melds);
+        const inWaits = waits.some(w => tileKind(w) === k);
+        if (inWaits) {
+          const furiten = p.isFuriten || isSelfDiscardFuriten(p, waits);
+          if (!furiten) {
+            // is_agari チェック
+            const ag = this.calc!.calculateAgari({
+              closedHand: p.hand,
+              openMelds: p.melds,
+              winTile: discardedTile,
+              isTsumo: false,
+              seatWind: seatWind(s, this.state.dealerSeat),
+              roundWind: this.state.round.wind,
+              doraIndicators: getDoraIndicators(this.state.wall, this.state.config.redDora),
+              uraDoraIndicators: [],
+              isRiichi: !!p.riichi,
+              isIppatsu: p.riichi?.ippatsu ?? false,
+              isDoubleRiichi: p.riichi?.isDouble ?? false,
+              isRinshan: false, isHaitei: false,
+              isHoutei: remainingDraws(this.state.wall) === 0,
+              isChankan: false,
+              rules: this.state.config,
+            });
+            canRon = ag.isAgari;
+          } else if (!p.isFuriten) {
+            this.state.players[s] = { ...p, isFuriten: true };
+          }
+        }
+      }
+
+      // ポン/大明槓/チー判定 (リーチ中は不可)
+      const canPon = !p.riichi && ponCandidates(p.hand, discardedTile).length > 0;
+      const canDaiminkan = !p.riichi && daiminkanCandidate(p.hand, discardedTile) !== null;
+      const isNextPlayer = s === nextSeat(discarder);
+      const canChi = !p.riichi && isNextPlayer && chiCandidates(p.hand, discardedTile).length > 0;
+
+      if (canRon || canPon || canDaiminkan || canChi) {
+        pendingCalls.push({ seat: s, canRon, canPon, canDaiminkan, canChi, responded: false, response: null });
+      }
+    }
+
+    if (pendingCalls.length > 0) {
+      this.state.pendingCalls = pendingCalls;
+      this.state.turn.phase = 'call';
+    } else {
+      this.advanceToNextDraw(discarder);
+    }
+  }
+
+  // ---------- ユーティリティ ----------
+
+  private clearAllIppatsu(): void {
+    for (const p of this.state.players) {
+      if (p.riichi?.ippatsu) {
+        this.state.players[p.seat] = {
+          ...p,
+          riichi: { ...p.riichi!, ippatsu: false },
+        };
+      }
+    }
+  }
+
+  private advanceToNextDraw(discarder: Seat): void {
+    this.state.turn.seat = nextSeat(discarder);
     this.state.turn.phase = 'draw';
+  }
+
+  private lastDiscardedTile(): Tile | null {
+    for (let i = this.state.history.length - 1; i >= 0; i--) {
+      const ev = this.state.history[i]!;
+      if (ev.kind === 'action' && ev.action.kind === 'discard') return ev.action.tile;
+      if (ev.kind === 'riichi') return ev.tile;
+    }
+    return null;
+  }
+
+  private lastDiscardTurn(): Seat {
+    for (let i = this.state.history.length - 1; i >= 0; i--) {
+      const ev = this.state.history[i]!;
+      if (ev.kind === 'action' && ev.action.kind === 'discard') return ev.seat;
+      if (ev.kind === 'riichi') return ev.seat;
+    }
+    throw new Error('lastDiscardTurn: no discard in history');
   }
 
   private lastTileForSeat(seat: Seat): Tile | null {
@@ -615,6 +932,8 @@ export class GameEngine {
     if (this.state.turn.seat !== seat) return null;
     return tileIdToTile(this.lastDrawnId, this.state.config.redDora);
   }
+
+  // ---------- 観測 ----------
 
   getObservation(seat: Seat): Observation {
     const me = this.state.players[seat];
@@ -644,13 +963,8 @@ export class GameEngine {
     };
   }
 
-  debugState(): GameState {
-    return this.state;
-  }
-
-  events(): GameEvent[] {
-    return [...this.state.history];
-  }
+  debugState(): GameState { return this.state; }
+  events(): GameEvent[] { return [...this.state.history]; }
 }
 
 export interface Observation {
@@ -668,7 +982,6 @@ export interface Observation {
   myScore: number;
   myRiichi: PlayerState['riichi'];
   myFuriten: boolean;
-  /** call phase で応答待ちの席 */
   pendingCalls: Seat[];
   players: Array<{
     seat: Seat;
