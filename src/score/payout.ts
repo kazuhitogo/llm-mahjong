@@ -115,6 +115,22 @@ export function computePaoTsumoPayout(
 }
 
 /**
+ * 流局時のノーテン罰符。テンパイ人数に関係なく総額 3000 点移動。
+ * 0人・4人テンパイは移動なし。
+ */
+export function computeNotenPayout(tenpaiSeats: Seat[]): ScoreDelta[] {
+  const seats = [0, 1, 2, 3] as Seat[];
+  const notenSeats = seats.filter(s => !tenpaiSeats.includes(s));
+  if (tenpaiSeats.length === 0 || tenpaiSeats.length === 4) return [];
+  const notenPay = 3000 / notenSeats.length;
+  const tenpaiGain = 3000 / tenpaiSeats.length;
+  return [
+    ...notenSeats.map(s => ({ seat: s, delta: -notenPay })),
+    ...tenpaiSeats.map(s => ({ seat: s, delta: tenpaiGain })),
+  ];
+}
+
+/**
  * 包（責任払い）ロン: paoSeat が全額払い、放銃者は免除。
  */
 export function computePaoRonPayout(

@@ -46,6 +46,7 @@ import {
   computeNagashiManganPayout,
   computePaoTsumoPayout,
   computePaoRonPayout,
+  computeNotenPayout,
   riichiSticksWinner,
 } from '../score/payout.js';
 
@@ -208,7 +209,13 @@ export class GameEngine {
     const drawn = drawTile(this.state.wall);
     if (!drawn) {
       this.applyNagashiMangan();
-      this.state.history.push({ kind: 'ryukyoku', reason: 'exhaustive_draw' });
+      const tenpaiSeats = this.detectTenpaiSeats();
+      if (tenpaiSeats.length > 0 && tenpaiSeats.length < 4) {
+        for (const { seat: s, delta } of computeNotenPayout(tenpaiSeats)) {
+          this.state.players[s].score += delta;
+        }
+      }
+      this.state.history.push({ kind: 'ryukyoku', reason: 'exhaustive_draw', tenpaiSeats });
       this.state.turn.phase = 'end';
       return;
     }
@@ -474,7 +481,7 @@ export class GameEngine {
 
     this.state.history.push({
       kind: 'agari', winner: seat, from: 'tsumo',
-      han: result.han, fu: result.fu, score: result.score,
+      han: result.han, fu: result.fu, score: result.score, yakuman: result.yakuman,
     });
     this.state.turn.phase = 'end';
   }
@@ -667,7 +674,7 @@ export class GameEngine {
 
     this.state.history.push({
       kind: 'agari', winner: seat, from: 'tsumo',
-      han: result.han, fu: result.fu, score: result.score,
+      han: result.han, fu: result.fu, score: result.score, yakuman: result.yakuman,
     });
     this.state.turn.phase = 'end';
   }
@@ -833,7 +840,7 @@ export class GameEngine {
 
       this.state.history.push({
         kind: 'agari', winner, from: loser,
-        han: result.han, fu: result.fu, score: result.score,
+        han: result.han, fu: result.fu, score: result.score, yakuman: result.yakuman,
       });
     }
 
@@ -986,6 +993,24 @@ export class GameEngine {
         kind: 'agari', winner: player.seat, from: 'tsumo', han: 5, fu: 0, score: 8000,
       });
     }
+  }
+
+  // ---------- テンパイ検出 ----------
+
+  private detectTenpaiSeats(): Seat[] {
+    if (!this.calc) return [];
+    const result: Seat[] = [];
+    for (const player of this.state.players) {
+      if (player.riichi) {
+        result.push(player.seat);
+        continue;
+      }
+      try {
+        const sh = this.calc.calculateShanten(player.hand, player.melds);
+        if (sh === 0) result.push(player.seat);
+      } catch { /* noop */ }
+    }
+    return result;
   }
 
   // ---------- 九種九牌 ----------

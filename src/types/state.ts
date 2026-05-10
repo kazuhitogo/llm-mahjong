@@ -163,7 +163,7 @@ export type GameEvent =
   | { kind: 'action'; seat: Seat; action: Action }
   | { kind: 'riichi'; seat: Seat; tile: Tile; junme: number }
   | { kind: 'violation'; seat: Seat; attempted: Action; reason: string; replacement: Action }
-  | { kind: 'ryukyoku'; reason: string }
+  | { kind: 'ryukyoku'; reason: string; tenpaiSeats?: Seat[] }
   | { kind: 'meld'; seat: Seat; meldKind: 'pon' | 'chi' | 'daiminkan' | 'ankan' | 'kakan'; tiles: Tile[] }
   | { kind: 'rinshan'; seat: Seat; tile: Tile }
-  | { kind: 'agari'; winner: Seat; from: Seat | 'tsumo'; han: number; fu: number; score: number };
+  | { kind: 'agari'; winner: Seat; from: Seat | 'tsumo'; han: number; fu: number; score: number; yakuman?: number };
