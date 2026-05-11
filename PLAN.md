@@ -4,36 +4,31 @@
 詳細仕様は [SPEC.md](./SPEC.md) を参照。
 
 ステータス記号:
-
 - ✅ 完了（テスト含む）
 - 🟡 進行中
 - ⬜ 未着手
 
-最終更新: 2026-05-10 (Phase 2b 完了)
+最終更新: 2026-05-11 (Phase 5 着手前)
 
 ---
 
-## Phase 1 — エンジン MVP（CLI で人間が打てる最小フロー）
+## Phase 1 — エンジン MVP
 
-| 項目 | 状態 | 場所 | 備考 |
-|---|---|---|---|
-| プロジェクト設定 | ✅ | `package.json` `tsconfig.json` `tsup.config.ts` `vitest.config.ts` | pnpm + Vitest + tsup, strict TS, ESM, Node 20+ |
-| コア型定義 | ✅ | `src/types/` | Tile, TileId, Seat, Wind, Meld, Action, GameState, RuleConfig |
-| 牌操作ユーティリティ | ✅ | `src/tiles/tile.ts` + `tile.test.ts` | tile 構築、kind 変換、ソート、ドラ表示計算、ID 変換 |
-| 決定論的 RNG | ✅ | `src/wall/rng.ts` | Mulberry32 |
-| 山積み（layout 136 牌） | ✅ | `src/wall/wall.ts` | シャッフル後固定、`WallState.layout` |
-| サイコロ + 開門位置計算 | ✅ | `src/wall/wall.ts` | 親が 2 個振る、`breakIndex` を計算 |
-| 配牌 | ✅ | `src/wall/wall.ts` | 親→下家→対面→上家、4×3+1 で各 13 枚 |
-| ツモ（決定論的順序） | ✅ | `src/wall/wall.ts` | `peekNextDraw` `drawTile`、layout から順次 |
-| 王牌・ドラ表示・嶺上 | ✅ | `src/wall/wall.ts` | `getDoraIndicators` `rinshanTileId` |
-| GameEngine 状態機械 | ✅ | `src/engine/engine.ts` | draw → discard → 次家 のループ |
-| 合法手列挙 | ✅ | `src/engine/legal.ts` | Phase 1 は discard のみ |
-| 違反処理 | ✅ | `src/engine/legal.ts` | 不正アクションは強制ツモ切りに置換 |
-| 観測情報生成 | ✅ | `src/engine/engine.ts` | `getObservation(seat)`、サイコロ・ドラ含む |
-| 荒牌流局 | ✅ | `src/engine/engine.ts` | 山切れで `phase=ryukyoku` → `end` |
-| イベントログ | ✅ | `src/engine/engine.ts` | init / dice / deal / draw / action / violation / ryukyoku |
-| CLI ハーネス | ✅ | `src/cli/play.ts` `src/cli/format.ts` | `pnpm cli --human SEAT --seed N` |
-| 単体テスト | ✅ | `src/**/*.test.ts` | tile / wall / engine、サンドボックスで 32 件パス |
+| 項目 | 状態 | 場所 |
+|---|---|---|
+| プロジェクト設定 | ✅ | `package.json` `tsconfig.json` `tsup.config.ts` `vitest.config.ts` |
+| コア型定義 | ✅ | `src/types/` |
+| 牌操作ユーティリティ | ✅ | `src/tiles/tile.ts` |
+| 決定論的 RNG | ✅ | `src/wall/rng.ts` |
+| 山積み・サイコロ・配牌・ツモ | ✅ | `src/wall/wall.ts` |
+| 王牌・ドラ表示・嶺上 | ✅ | `src/wall/wall.ts` |
+| GameEngine 状態機械 | ✅ | `src/engine/engine.ts` |
+| 合法手列挙（打牌のみ） | ✅ | `src/engine/legal.ts` |
+| 観測情報生成 | ✅ | `src/engine/engine.ts` |
+| 荒牌流局 | ✅ | `src/engine/engine.ts` |
+| イベントログ | ✅ | `src/engine/engine.ts` |
+| CLI ハーネス | ✅ | `src/cli/play.ts` `src/cli/format.ts` |
+| 単体テスト | ✅ | `src/**/*.test.ts` |
 
 ---
 
@@ -41,74 +36,98 @@
 
 ### 2a — 鳴きなしで和了通す
 
-| 項目 | 状態 | 場所 | 備考 |
-|---|---|---|---|
-| `riichi-rs-node` 統合 | ✅ | `src/score/calculator.ts` | createRequire で同期ロード、RiichiRsCalculator |
-| `ScoreCalculator` インタフェース | ✅ | `src/score/calculator.ts` | calculateAgari/calculateShanten/riichiCandidates/waitTiles |
-| ツモ和了アクション | ✅ | engine | `tsumo` action, legalActions に tsumo 追加, 点数授受 |
-| ロン和了アクション | ✅ | engine | call phase, `ron`/`pass` action, ダブロン対応 |
-| リーチ宣言 | ✅ | engine | `riichi` action, 1000点減点, ippatsu フラグ管理 |
-| フリテン判定 | ✅ | `src/engine/furiten.ts` | 自家河・同順・リーチ後 |
-| 嶺上開花・海底・河底 | ✅ | engine | isHaitei/isHoutei を agari 計算時に渡す |
-| 点数授受 | ✅ | `src/score/payout.ts` | 親子・ツモ・ロン・本場・供託 |
+| 項目 | 状態 | 場所 |
+|---|---|---|
+| `riichi-rs-node` 統合 | ✅ | `src/score/calculator.ts` |
+| `ScoreCalculator` インタフェース | ✅ | `src/score/calculator.ts` |
+| ツモ和了・ロン和了アクション | ✅ | engine |
+| リーチ宣言 | ✅ | engine |
+| フリテン判定 | ✅ | `src/engine/furiten.ts` |
+| 嶺上開花・海底・河底 | ✅ | engine |
+| 点数授受 | ✅ | `src/score/payout.ts` |
 
 ### 2b — 鳴きを追加
 
-| 項目 | 状態 | 場所 | 備考 |
-|---|---|---|---|
-| ポン | ✅ | engine | 副露生成、鳴き優先度 |
-| チー | ✅ | engine | 上家のみ、喰い替え禁止 |
-| 大明槓 | ✅ | engine | 嶺上ツモ |
-| 暗槓・加槓 | ✅ | engine | 自分の番、搶槓考慮 |
-| 鳴き宣言の優先度解決 | ✅ | engine | ロン > ポン/カン > チー、ダブロン |
-| 喰い断・喰い延ばし | ✅ | engine + score | RuleConfig 連動 |
+| 項目 | 状態 | 場所 |
+|---|---|---|
+| ポン・チー・大明槓・暗槓・加槓 | ✅ | engine |
+| 鳴き宣言の優先度解決 | ✅ | engine |
+| 喰い断・喰い延ばし | ✅ | engine + score |
 
 ### 2c — 途中流局・特殊役
 
-| 項目 | 状態 | 場所 | 備考 |
-|---|---|---|---|
-| 九種九牌 | ✅ | engine | 1 巡目自分の番、字牌+1/9 が 9 種以上 |
-| 四風連打 | ✅ | engine | 1 巡目で全員同じ風牌切り |
-| 四家立直 | ✅ | engine | 4 人がリーチ完了で流局 |
-| 四開槓 | ✅ | engine | 同一プレイヤー以外で 4 槓 |
-| 三家和 | ✅ | engine | トリプルロン |
-| 流し満貫 | ✅ | engine + score | ヤオチュー牌のみで鳴かれていない |
-| 役満 | ✅ | score | 13 役満（国士・四暗刻・大三元 etc.） |
-| 包（責任払い） | ✅ | score | 大三元・大四喜・四槓子 |
+| 項目 | 状態 | 場所 |
+|---|---|---|
+| 九種九牌・四風連打・四家立直・四開槓・三家和 | ✅ | engine |
+| 流し満貫 | ✅ | engine + score |
+| 役満（13役満） | ✅ | score |
+| 包（責任払い） | ✅ | score |
 
 ---
 
 ## Phase 3 — 半荘進行
 
-| 項目 | 状態 | 場所 | 備考 |
-|---|---|---|---|
-| 連荘・親流れ判定 | ✅ | engine | 親聴牌・和了で連荘 |
-| 本場の加算 | ✅ | engine | 1500 点の上乗せ |
-| 供託（リーチ棒）の引き継ぎ | ✅ | engine | 局またぎ |
-| 半荘終了判定 | ✅ | engine | 南 4 局終了 + 飛び |
-| 順位計算（オカ・ウマ） | ✅ | `src/score/standings.ts`（新規） | 25000-30000 オカ +20、ウマ 5-10 |
-| 対局ログ JSON 出力 | ✅ | `src/log/`（新規） | 完全な決定論的リプレイ可能 |
-| ログから状態再現（リプレイ） | ✅ | `src/log/replay.ts` | seed + アクション列で同一トレース |
+| 項目 | 状態 | 場所 |
+|---|---|---|
+| 連荘・親流れ判定 | ✅ | engine |
+| 本場の加算 | ✅ | engine |
+| 供託（リーチ棒）の引き継ぎ | ✅ | engine |
+| 半荘終了判定 | ✅ | engine |
+| 飛び終了時のリーチ棒配布 | ✅ | `src/engine/hanchan.ts` |
+| 順位計算（オカ・ウマ） | ✅ | `src/score/standings.ts` |
+| 対局ログ JSON 出力 | ✅ | `src/log/log.ts` |
+| ログから状態再現（リプレイ） | ✅ | `src/log/replay.ts` |
 
 ---
 
 ## Phase 4 — エージェントレイヤ
 
+| 項目 | 状態 | 場所 |
+|---|---|---|
+| Player インタフェース定義 | ✅ | `src/agent/player.ts` |
+| ScriptedBot プレイヤー | ✅ | `src/agent/scripted.ts` |
+| Observation の自然言語整形 | ✅ | `src/agent/llm/format.ts` |
+| LlmAgent ランナー（Ollama） | ✅ | `src/agent/llm/ollama.ts` |
+| 4 エージェント対局ハーネス | ✅ | `src/cli/match.ts` |
+
+### Phase 4 で発見・修正したバグ
+
+| バグ | 修正場所 | 内容 |
+|---|---|---|
+| `riichiCandidates` 非テンパイ手にリーチ候補を生成 | `src/score/calculator.ts` | `hairi.now === 0` チェック追加。`riichi-rs-node` は非テンパイ手でも `waits_after_discard` を返すため必須 |
+| 飛び終了時のリーチ棒消滅 | `src/engine/hanchan.ts` | 飛びパスで `distributeSticks()` を呼ぶよう修正 |
+| qwen3 系 thinking モード | `src/agent/llm/ollama.ts` | `think: false` を API リクエストに追加 |
+| `legalActions` アクション順 | `src/engine/engine.ts` | ツモ→打牌→リーチの順に変更（モデルが先頭番号を選びやすいため） |
+| `riichiCandidates` no yaku エラー | `src/engine/engine.ts` | try-catch で握りつぶし |
+
+---
+
+## Phase 5 — Web ビューア（次フェーズ）
+
+### 5a — match ログ出力接続
+
 | 項目 | 状態 | 場所 | 備考 |
 |---|---|---|---|
-| Player インタフェース定義 | ✅ | `src/agent/player.ts`（新規） | `decide(observation, legalActions): Promise<Action>` |
-| HumanCli プレイヤー | — | `src/agent/human.ts` | 既存 play.ts で代替 |
-| ScriptedBot プレイヤー | ✅ | `src/agent/scripted.ts` | ランダム / tsumo優先 |
-| Observation の自然言語整形 | ✅ | `src/agent/llm/format.ts` | Ollama 用日本語プロンプト |
-| Anthropic tool スキーマ | — | — | Ollama で代替 |
-| OpenAI tool スキーマ | — | — | Ollama で代替 |
-| LlmAgent ランナー | ✅ | `src/agent/llm/ollama.ts` | Ollama API, timeout, fallback |
-| 4 エージェント対局ハーネス | ✅ | `src/cli/match.ts`（新規） | gemma4:e2b×2, qwen3.5:9b, qwen3-vl:8b |
+| `match.ts` に `--log-file` オプション追加 | ⬜ | `src/cli/match.ts` | 対局後に JSON 保存 |
+| `exportLog` / `serializeLog` 呼び出し接続 | ⬜ | `src/cli/match.ts` | `src/log/log.ts` の関数を使う |
+
+### 5b — Web ビューア実装
+
+| 項目 | 状態 | 場所 | 備考 |
+|---|---|---|---|
+| Vite + React プロジェクト設定 | ⬜ | `src/viewer/` | TypeScript, 既存型を import |
+| 牌譜 JSON 読み込み UI | ⬜ | `src/viewer/` | ファイル選択 or ドラッグ&ドロップ |
+| 局選択・ステップ送り UI | ⬜ | `src/viewer/` | 前へ/次へ、局リスト |
+| 手牌・河・副露の表示 | ⬜ | `src/viewer/` | 4 プレイヤー分 |
+| 点数・供託・ドラ表示 | ⬜ | `src/viewer/` | |
+| イベント説明テキスト表示 | ⬜ | `src/viewer/` | 「seat1 が 3m を打牌」等 |
+| `pnpm viewer` スクリプト | ⬜ | `package.json` | `vite src/viewer` |
 
 ---
 
 ## 観測中の検討事項
 
-- `riichi-rs-node` を実際に組み込んでみて API が想定通りか確認（Phase 2a 着手時）
-- LLM のレイテンシ次第で同期進行が現実的か → 必要なら Phase 4 で非同期化検討
-- リプレイファイルのフォーマットは天鳳牌譜互換を視野に入れるか
+- 天鳳牌譜互換フォーマット（XML）: 要求あれば Phase 5 後に追加
+- Anthropic / OpenAI API エージェント: Ollama で代替済み、必要なら追加
+- LLM モデルの応答品質: gemma3/gemma4(2B) は空返答→fallback が多い。qwen3.5:9b は推論するが遅い
+- `qwen3-vl:8b` の空返答: `num_predict: 256` に対して thinking が長すぎてトークン不足。増やせば改善する可能性あり
