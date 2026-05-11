@@ -189,7 +189,13 @@ export default function App() {
               <span style={{ fontSize: 10, color: '#999' }}>← →</span>
             </div>
             {snap && (
-              <div style={{ marginTop: 4, fontSize: 12, color: '#333', borderLeft: '3px solid #4a9', paddingLeft: 8 }}>
+              <div style={{
+                marginTop: 4, fontSize: 12, paddingLeft: 8,
+                ...(snap.event.kind === 'think'
+                  ? { color: '#555', borderLeft: '3px solid #a8a', background: '#f9f0ff', borderRadius: '0 4px 4px 0', padding: '4px 8px', whiteSpace: 'pre-wrap', maxHeight: 80, overflow: 'auto' }
+                  : { color: '#333', borderLeft: '3px solid #4a9' }
+                )
+              }}>
                 {snap.description}
               </div>
             )}

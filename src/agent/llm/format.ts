@@ -87,7 +87,7 @@ export function buildPrompt(obs: Observation, actions: Action[], seatName: strin
   }
 
   lines.push('');
-  lines.push('番号のみ（例: 2）または「番号. 理由」の形式で回答してください。');
+  lines.push('THINK: <1-2 sentence reasoning> ACTION: <number>');
 
   return lines.join('\n');
 }

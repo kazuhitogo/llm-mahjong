@@ -6,9 +6,13 @@
  *   pnpm match --models "gemma4:e2b,gemma4:e2b,qwen3.5:9b,qwen3-vl:8b" --seed 42
  *   pnpm match --verbose
  */
+import { writeFileSync, mkdirSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { HanchanEngine } from '../engine/hanchan.js';
 import { RiichiRsCalculator } from '../score/calculator.js';
 import { OllamaAgent } from '../agent/llm/ollama.js';
+import { exportLog, serializeLog } from '../log/log.js';
 import type { Player } from '../agent/player.js';
 import type { Seat } from '../types/seat.js';
 
@@ -20,6 +24,7 @@ interface MatchOptions {
   verbose: boolean;
   baseUrl: string;
   timeoutMs: number;
+  logFile: string | null;
 }
 
 function parseArgs(argv: string[]): MatchOptions {
@@ -29,6 +34,7 @@ function parseArgs(argv: string[]): MatchOptions {
     verbose: false,
     baseUrl: 'http://localhost:11434',
     timeoutMs: 120000,
+    logFile: null,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
@@ -45,8 +51,10 @@ function parseArgs(argv: string[]): MatchOptions {
       opts.baseUrl = argv[++i]!;
     } else if (a === '--timeout') {
       opts.timeoutMs = Number(argv[++i]!) * 1000;
+    } else if (a === '--log-file') {
+      opts.logFile = argv[++i]!;
     } else if (a === '--help' || a === '-h') {
-      console.log('Usage: pnpm match [--models M0,M1,M2,M3] [--seed N] [--verbose]');
+      console.log('Usage: pnpm match [--models M0,M1,M2,M3] [--seed N] [--verbose] [--log-file PATH]');
       process.exit(0);
     }
   }
@@ -84,12 +92,13 @@ async function playKyoku(
       const acts = engine.legalActions(seat);
       if (acts.length === 0) { engine.step(); continue; }
 
-      const chosen = await players[seat]!.decide(obs, acts);
+      const { action: chosen, reasoning } = await players[seat]!.decide(obs, acts);
       if (verbose) {
         const wj = SEAT_WIND_FROM_DEALER(seat, dealerSeat);
+        if (reasoning) console.log(`  [${wj}家:${players[seat]!.name}] 思考: ${reasoning.slice(0, 120)}`);
         console.log(`  [${wj}家:${players[seat]!.name}] → ${actionSummary(chosen)}`);
       }
-      engine.applyAction(seat, chosen);
+      engine.applyAction(seat, chosen, reasoning);
       continue;
     }
 
@@ -100,12 +109,13 @@ async function playKyoku(
         const acts = engine.legalActions(pc.seat);
         if (acts.length === 0) { engine.applyAction(pc.seat, { kind: 'pass' }); continue; }
 
-        const chosen = await players[pc.seat]!.decide(obs, acts);
+        const { action: chosen, reasoning } = await players[pc.seat]!.decide(obs, acts);
         if (verbose) {
           const wj = SEAT_WIND_FROM_DEALER(pc.seat, dealerSeat);
+          if (reasoning) console.log(`  [${wj}家:${players[pc.seat]!.name}] 思考: ${reasoning.slice(0, 120)}`);
           console.log(`  [${wj}家:${players[pc.seat]!.name}] call → ${actionSummary(chosen)}`);
         }
-        engine.applyAction(pc.seat, chosen);
+        engine.applyAction(pc.seat, chosen, reasoning);
       }
       continue;
     }
@@ -185,6 +195,14 @@ async function main(): Promise<void> {
     const model = opts.models[s.seat]!;
     console.log(`  ${s.rank}位 seat${s.seat}(${model}): ${s.rawScore}点  最終: ${s.finalScore > 0 ? '+' : ''}${s.finalScore}`);
   }
+
+  const projectRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
+  const logFile = opts.logFile ?? join(projectRoot, 'logs', `${ts}.json`);
+  mkdirSync(dirname(logFile), { recursive: true });
+  const log = exportLog(hanchan);
+  writeFileSync(logFile, serializeLog(log), 'utf8');
+  console.log(`\nログ保存: ${logFile}`);
 }
 
 main().catch(err => { console.error(err); process.exit(1); });

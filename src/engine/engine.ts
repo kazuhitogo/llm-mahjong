@@ -248,7 +248,10 @@ export class GameEngine {
     this.state.history.push({ kind: 'draw', seat, tile });
   }
 
-  applyAction(seat: Seat, action: Action): void {
+  applyAction(seat: Seat, action: Action, reasoning?: string): void {
+    if (reasoning) {
+      this.state.history.push({ kind: 'think', seat, reasoning });
+    }
     const phase = this.state.turn.phase;
 
     if (phase === 'call') {

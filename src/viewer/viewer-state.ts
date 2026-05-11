@@ -120,6 +120,8 @@ function describeEvent(ev: GameEvent): string {
     }
     case 'violation':
       return `違反: seat${ev.seat} ${ev.attempted.kind} → ${ev.replacement.kind}`;
+    case 'think':
+      return `💭 seat${ev.seat} 思考: ${ev.reasoning}`;
     default:
       return `[${(ev as { kind: string }).kind}]`;
   }
