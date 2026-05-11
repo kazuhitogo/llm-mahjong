@@ -12,7 +12,7 @@ import { OllamaAgent } from '../agent/llm/ollama.js';
 import type { Player } from '../agent/player.js';
 import type { Seat } from '../types/seat.js';
 
-const DEFAULT_MODELS = ['gemma4:e2b', 'gemma4:e2b', 'qwen3.5:9b', 'qwen3-vl:8b'] as const;
+const DEFAULT_MODELS = ['gemma4:e2b', 'gemma4:e2b', 'gemma3:4b-it-qat', 'gemma3:4b-it-qat'] as const;
 
 interface MatchOptions {
   models: [string, string, string, string];
