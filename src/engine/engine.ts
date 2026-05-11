@@ -134,17 +134,24 @@ export class GameEngine {
     const player = this.state.players[seat];
     const actions: Action[] = [];
 
-    // ツモ和了 (calculator あり)
+    // ツモ和了 (calculator あり) — 常に先頭
     if (this.calc) {
       const isTsumoAgari = this.checkTsumoAgari(seat, player);
       if (isTsumoAgari) actions.push({ kind: 'tsumo' });
     }
 
-    // リーチ宣言 (未リーチ・score >= 1000)
+    // 打牌 (ツモ和了の次、リーチより先)
+    actions.push(...getDiscardCandidates(this.state, seat));
+
+    // リーチ宣言 (未リーチ・score >= 1000) — 打牌の後
     if (this.calc && !player.riichi && player.score >= 1000) {
-      const candidates = this.calc.riichiCandidates(player.hand, player.melds);
-      for (const { discard } of candidates) {
-        actions.push({ kind: 'riichi', tile: discard });
+      try {
+        const candidates = this.calc.riichiCandidates(player.hand, player.melds);
+        for (const { discard } of candidates) {
+          actions.push({ kind: 'riichi', tile: discard });
+        }
+      } catch {
+        // no yaku など、リーチ候補なし
       }
     }
 
@@ -158,9 +165,6 @@ export class GameEngine {
     if (this.state.config.abortiveDraws.kyushuKyuhai && this.isKyushuEligible(seat, player)) {
       actions.push({ kind: 'kyushu_kyuhai' });
     }
-
-    // 打牌
-    actions.push(...getDiscardCandidates(this.state, seat));
 
     return actions;
   }

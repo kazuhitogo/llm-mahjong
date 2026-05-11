@@ -187,7 +187,8 @@ export class RiichiRsCalculator implements ScoreCalculator {
     });
 
     const hairi = result.hairi;
-    if (!hairi || hairi.waits_after_discard.length === 0) return [];
+    // hairi.now === 0 のときだけテンパイ可能（それ以外はwaits_after_discardが非空でも無効）
+    if (!hairi || hairi.now !== 0 || hairi.waits_after_discard.length === 0) return [];
 
     const kindMap = new Map<number, Tile[]>();
     for (const t of hand14) {
