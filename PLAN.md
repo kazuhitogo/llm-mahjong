@@ -8,7 +8,7 @@
 - 🟡 進行中
 - ⬜ 未着手
 
-最終更新: 2026-05-11 (Phase 5 着手前)
+最終更新: 2026-05-11 (Phase 5c 完了)
 
 ---
 
@@ -108,20 +108,63 @@
 
 | 項目 | 状態 | 場所 | 備考 |
 |---|---|---|---|
-| `match.ts` に `--log-file` オプション追加 | ⬜ | `src/cli/match.ts` | 対局後に JSON 保存 |
-| `exportLog` / `serializeLog` 呼び出し接続 | ⬜ | `src/cli/match.ts` | `src/log/log.ts` の関数を使う |
+| `match.ts` に `--log-file` オプション追加 | ✅ | `src/cli/match.ts` | 対局後に JSON 保存 |
+| `exportLog` / `serializeLog` 呼び出し接続 | ✅ | `src/cli/match.ts` | `src/log/log.ts` の関数を使う |
 
 ### 5b — Web ビューア実装
 
 | 項目 | 状態 | 場所 | 備考 |
 |---|---|---|---|
-| Vite + React プロジェクト設定 | ⬜ | `src/viewer/` | TypeScript, 既存型を import |
-| 牌譜 JSON 読み込み UI | ⬜ | `src/viewer/` | ファイル選択 or ドラッグ&ドロップ |
-| 局選択・ステップ送り UI | ⬜ | `src/viewer/` | 前へ/次へ、局リスト |
-| 手牌・河・副露の表示 | ⬜ | `src/viewer/` | 4 プレイヤー分 |
-| 点数・供託・ドラ表示 | ⬜ | `src/viewer/` | |
-| イベント説明テキスト表示 | ⬜ | `src/viewer/` | 「seat1 が 3m を打牌」等 |
-| `pnpm viewer` スクリプト | ⬜ | `package.json` | `vite src/viewer` |
+| Vite + React プロジェクト設定 | ✅ | `src/viewer/`, `vite.config.ts` | TypeScript, 既存型を import |
+| 牌譜 JSON 読み込み UI | ✅ | `src/viewer/App.tsx` | ファイル選択 |
+| 局選択・ステップ送り UI | ✅ | `src/viewer/App.tsx` | 前へ/次へ・スライダー・← →キー |
+| 手牌・河・副露の表示 | ✅ | `src/viewer/components/` | 4 プレイヤー分 |
+| 点数・供託・ドラ表示 | ✅ | `src/viewer/App.tsx` | 供託・残り牌数・最終結果 |
+| イベント説明テキスト表示 | ✅ | `src/viewer/viewer-state.ts` | 「seat1(南家) 打牌 3m」等 |
+| `pnpm viewer` スクリプト | ✅ | `package.json` | `vite` (root: src/viewer) |
+
+### 5c — 麻雀卓スタイルビューア（一人称視点）
+
+既存の 2×2 グリッドを天鳳風麻雀卓レイアウトに置換する。  
+詳細仕様は [SPEC.md §12c〜12f](./SPEC.md) を参照。
+
+| 項目 | 状態 | 場所 | 備考 |
+|---|---|---|---|
+| POV 選択 state + ヘッダー UI | ✅ | `App.tsx` | `povSeat: 0-3`, `showAll: bool` |
+| `TileBack` コンポーネント | ✅ | `src/viewer/components/TileBack.tsx` | 裏向き牌（濃い青矩形） |
+| `TableLayout` コンポーネント | ✅ | `src/viewer/components/TableLayout.tsx` | 正方形卓、absolute + rotate |
+| `SidePanel` コンポーネント | ✅ | `src/viewer/components/SidePanel.tsx` | 手牌・副露・捨て牌・スコア |
+| `CenterInfo` コンポーネント | ✅ | `src/viewer/components/CenterInfo.tsx` | 局/本場/供託/残り牌数/4者スコア |
+| `App.tsx` メインエリア差し替え | ✅ | `src/viewer/App.tsx` | 2×2 → `TableLayout` へ |
+
+#### 実装順序
+1. `TileBack.tsx` を新規作成
+2. `CenterInfo.tsx` を新規作成
+3. `SidePanel.tsx` を新規作成（props: player, seat, dealerSeat, isPov, showAll, position, modelName）
+4. `TableLayout.tsx` を新規作成（absolute + rotate で 4 辺配置）
+5. `App.tsx` を改修（POV state 追加 + メインエリア差し替え）
+
+#### 座席マッピング
+```ts
+const seatAt = {
+  bottom: povSeat,
+  right:  (povSeat + 1) % 4,
+  top:    (povSeat + 2) % 4,
+  left:   (povSeat + 3) % 4,
+};
+```
+
+#### 捨て牌レイアウト（天鳳準拠）
+- 各 `SidePanel` 内で描画（外部 `DiscardArea` コンポーネントは不要）
+- 最大 6 枚 × 3 行 = 18 枚
+- bottom: 捨て牌が手牌より卓中央寄り（上側）に来る flex-column
+- top/left/right: `transform: rotate(N deg)` で回転後も同じ構造で可
+
+#### スタイル定数
+```ts
+const TABLE_BG = '#1a4a2e';    // フェルト
+const TILE_BACK_BG = '#2c5282'; // 裏牌
+```
 
 ---
 

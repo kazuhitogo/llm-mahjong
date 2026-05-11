@@ -251,25 +251,185 @@ seat3: gemma3:4b-it-qat
 
 ---
 
-## 12. Web ビューア（Phase 5 — 未実装）
+## 12. Web ビューア（Phase 5 — Phase 5b 完了、Phase 5c 未実装）
 
 牌譜 JSON を読み込み、各ステップを視覚的に追えるブラウザ UI。
 
-### 機能要件
-- 牌譜 JSON ファイルの読み込み
-- 全プレイヤーの手牌・河・副露・点数の表示
-- ステップ送り（前へ/次へ）・局選択
-- 各イベントの説明表示（誰が何をしたか）
-- リーチ・ドラ・供託の視覚的な強調
+### 12a. データフロー（実装済み）
 
-### 実装方針
-- Vite + React（TypeScript）
-- `src/viewer/` 配下に新設
-- 既存の `GameLog` / `GameEvent` 型を直接読み込み
-- `pnpm viewer` でローカル起動
+```
+pnpm match → logs/{timestamp}.json
+→ ブラウザでファイル読込
+→ buildSnapshots(kyoku.events): ViewerSnapshot[]
+→ React state で step 管理
+```
 
-### 事前作業
-- `match.ts` の実行後に JSON ログファイルを保存する機能の追加（`--log-file` オプション等）
+- `src/viewer/viewer-state.ts`: `buildSnapshots()` でイベント列から手牌/河/副露を再構築
+- `ViewerSnapshot`: `{ event, description, round, dealerSeat, players[4], wallRemaining }`
+- `ViewerPlayer`: `{ hand: Tile[], discards: ViewerDiscard[], melds: ViewerMeld[], riichi: boolean }`
+
+### 12b. 現行レイアウト（2×2 グリッド — 要置換）
+
+- 4 プレイヤーを 2×2 グリッドで並べる単純レイアウト
+- `App.tsx`, `PlayerPanel.tsx`, `TileDisplay.tsx`
+
+### 12c. 新レイアウト設計（Phase 5c — 麻雀卓スタイル）
+
+**目標**: 天鳳に近い麻雀卓一人称視点ビューア。レート表示なし。
+
+**全体レイアウト**:
+```
+┌──────────────────────────────────────────────────────────┐
+│ ヘッダー: ログ読込ボタン / 局タブ / POV選択(seat0〜3)   │
+│           seed / 全開示トグル                            │
+├──────────────────────────────────────────────────────────┤
+│ コントロール: ⏮◀▶⏭ スライダー / イベント説明文        │
+├──────────────────────────────────────────────────────────┤
+│                                                          │
+│          [Top: 対面プレイヤー, 180°回転]                 │
+│                                                          │
+│  [Left]  [Center: 局/本場/供託/残り牌数/スコア]  [Right] │
+│  90°回転  [各自の捨て牌エリア 4 分割]            -90°回転│
+│                                                          │
+│          [Bottom: 自分(POV), 正向き]                     │
+│                                                          │
+├──────────────────────────────────────────────────────────┤
+│ フッター: 最終結果                                       │
+└──────────────────────────────────────────────────────────┘
+```
+
+**座席マッピング（POV 視点）**:
+```ts
+// povSeat = 選択中の視点席
+const seatAt = {
+  bottom: povSeat,
+  right:  (povSeat + 1) % 4,
+  top:    (povSeat + 2) % 4,
+  left:   (povSeat + 3) % 4,
+};
+```
+
+**手牌表示ルール**:
+- `bottom`（自分）: 表向き（`TileDisplay`）
+- その他: 裏向き（`TileBack`）デフォルト
+- "全開示" トグル ON → 全員表向き（デバッグ用）
+
+### 12d. コンポーネント設計（Phase 5c）
+
+**ファイル構成**（`src/viewer/` 以下）:
+```
+viewer-state.ts          ← 既存（変更なし）
+App.tsx                  ← 大幅改修（卓レイアウト対応）
+components/
+  TileDisplay.tsx        ← 既存（変更なし）
+  TileBack.tsx           ← 新規: 裏向き牌
+  TableLayout.tsx        ← 新規: 卓の外枠（absolute positioning）
+  SidePanel.tsx          ← 新規: 1辺分のプレイヤー表示（手牌+副露+捨て牌）
+  CenterInfo.tsx         ← 新規: 中央パネル（局情報+スコア）
+```
+
+**TableLayout.tsx**:
+```tsx
+// 正方形コンテナ（aspect-ratio: 1, max-width: 720px, margin: auto）
+// background: '#1a4a2e'（麻雀卓フェルト色）
+// border-radius: 12px, box-shadow: 0 4px 20px rgba(0,0,0,0.6)
+// position: relative
+
+// 子要素の配置（position: absolute）:
+// bottom面: bottom=0, left=0, right=0, height='22%'
+// top面:    top=0, left=0, right=0, height='22%', transformOrigin='center center'
+//           transform='rotate(180deg)'
+// left面:   left=0, top='22%', bottom='22%', width='22%'
+//           transformOrigin='center center', transform='rotate(90deg)'
+// right面:  right=0, top='22%', bottom='22%', width='22%'
+//           transformOrigin='center center', transform='rotate(-90deg)'
+// center:   top='22%', left='22%', right='22%', bottom='22%'
+```
+
+**SidePanel.tsx**:
+```tsx
+interface Props {
+  player: ViewerPlayer;
+  seat: number;
+  dealerSeat: number;
+  isPov: boolean;          // true: 表向き手牌
+  showAll: boolean;        // 全開示トグル
+  position: 'bottom' | 'top' | 'left' | 'right';
+  modelName?: string;
+}
+
+// レイアウト (flex-column, bottom-to-center 向き):
+//   外枠: 透明〜半透明の背景, 白テキスト
+//   手牌行: isPov||showAll ? TileDisplay : TileBack, flex-row
+//   副露行: TileDisplay (鳴き牌は常に表向き), flex-row
+//   捨て牌行: TileDisplay（リーチ宣言牌は黄色ハイライト、鳴かれた牌は暗く）
+//   プレイヤー情報: seat番号, 風(東南西北), 親マーク, リーチ棒アイコン
+//   スコア: 白字で点数表示
+
+// 捨て牌配置: 最大6枚×3行 = 18枚（天鳳準拠）
+// bottom の場合: 上から捨て牌→手牌の順（捨て牌が卓中央寄り）
+// top/left/right の場合: 回転しているので同じ順で問題なし
+```
+
+**TileBack.tsx**:
+```tsx
+interface Props { small?: boolean; }
+
+// 裏向き牌の表示
+// background: '#2c5282'（濃い青）
+// border: '1px solid #4a7fa5'
+// サイズ: TileDisplay と同等（small=false: 20×26px 程度、small=true: 14×18px）
+// display: inline-block, border-radius: 2px, margin: 1px
+```
+
+**CenterInfo.tsx**:
+```tsx
+interface Props {
+  snap: ViewerSnapshot;
+  seatAt: { bottom: number; right: number; top: number; left: number };
+}
+
+// 中央パネル（卓中央に重なる）
+// 白地の丸いパネル、小さめ（w: 40%相当）
+// 表示:
+//   局/本場: 「東1局 0本場」
+//   供託: リーチ棒数
+//   残り牌数
+//   各方向のスコア（bottom/top/left/right の位置に合わせて配置）
+//     - bottom方向に bottom席のスコア
+//     - top方向に top席のスコア
+//     - left方向に left席のスコア
+//     - right方向に right席のスコア
+```
+
+### 12e. App.tsx 改修ポイント（Phase 5c）
+
+追加 state:
+```tsx
+const [povSeat, setPovSeat] = useState(0);
+const [showAll, setShowAll] = useState(false);
+```
+
+ヘッダーに追加:
+```tsx
+// POV 選択: <select value={povSeat} onChange={e => setPovSeat(Number(e.target.value))}>
+//   <option value={0}>seat0 視点</option> ... </select>
+// 全開示トグル: <label><input type="checkbox" checked={showAll} onChange={...}/> 全開示</label>
+```
+
+メインエリア: 2×2 グリッドを `TableLayout` + 4つの `SidePanel` + `CenterInfo` に置換。
+
+### 12f. スタイル定数
+
+```ts
+const TABLE_BG = '#1a4a2e';        // フェルト色
+const TILE_BACK_BG = '#2c5282';    // 裏牌色
+const RIICHI_COLOR = '#cc0000';    // リーチ表示
+const DEALER_COLOR = '#e8a000';    // 親マーク
+const TEXT_COLOR = '#ffffff';      // 白テキスト
+```
+
+**【実装ステータス】** Phase 5a/5b/5c ✅ 完了（麻雀卓スタイルビューア稼働中）。
 
 ---
 
@@ -285,7 +445,7 @@ src/
   agent/       ✅ Player インタフェース・OllamaAgent・ScriptedBot
   log/         ✅ GameLog 型・シリアライズ・replayKyoku
   cli/         ✅ play.ts（人間 CLI）・match.ts（LLM 対局ハーネス）
-  viewer/      ⬜ Web ビューア（Phase 5）
+  viewer/      ✅ Web ビューア Phase 5b / ⬜ Phase 5c 麻雀卓スタイル
 ```
 
 ---
