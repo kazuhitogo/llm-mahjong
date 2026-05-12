@@ -19,9 +19,12 @@ function handStr(tiles: readonly Tile[]): string {
   return tiles.map(tileStr).join(' ');
 }
 
-function meldStr(m: Meld): string {
+function meldStr(m: Meld, dealerSeat: number): string {
   const k = m.kind === 'pon' ? 'ポン' : m.kind === 'chi' ? 'チー' : m.kind === 'daiminkan' ? '大明槓' : m.kind === 'ankan' ? '暗槓' : '加槓';
-  return `[${k}:${handStr(m.tiles)}]`;
+  const from = m.kind !== 'ankan' && m.calledTile
+    ? `(${SEAT_WIND[(m.from - dealerSeat + 4) % 4]}家から)`
+    : '';
+  return `[${k}${from}:${handStr(m.tiles)}]`;
 }
 
 function actionLabel(a: Action, idx: number): string {
@@ -29,7 +32,7 @@ function actionLabel(a: Action, idx: number): string {
   switch (a.kind) {
     case 'tsumo': return `${i}. ツモ和了`;
     case 'ron': return `${i}. ロン和了`;
-    case 'riichi': return `${i}. リーチ (${tileStr(a.tile)}を切る)`;
+    case 'riichi': return `${i}. リーチ宣言 (${tileStr(a.tile)}を切る)`;
     case 'discard': return `${i}. 打牌: ${tileStr(a.tile)}${a.tsumogiri ? ' (ツモ切り)' : ''}`;
     case 'pon': return `${i}. ポン`;
     case 'chi': return `${i}. チー [${handStr(a.tiles)}]`;
@@ -39,6 +42,19 @@ function actionLabel(a: Action, idx: number): string {
     case 'kyushu_kyuhai': return `${i}. 九種九牌（流局）`;
     case 'pass': return `${i}. パス（見送り）`;
   }
+}
+
+function discardHistoryStr(
+  discards: Observation['players'][number]['discards'],
+): string {
+  if (discards.length === 0) return 'なし';
+  return discards.map(d => {
+    let s = `${d.junme}巡:${tileStr(d.tile)}`;
+    if (d.isRiichiDeclaration) s += '[リ]';
+    if (d.tsumogiri) s += '(ツ)';
+    if (d.calledBy !== null) s += '★';
+    return s;
+  }).join(' ');
 }
 
 export function buildPrompt(obs: Observation, actions: Action[], seatName: string): string {
@@ -57,7 +73,7 @@ export function buildPrompt(obs: Observation, actions: Action[], seatName: strin
   ];
 
   if (obs.myMelds.length > 0) {
-    lines.push(`  副露: ${obs.myMelds.map(meldStr).join(' ')}`);
+    lines.push(`  副露: ${obs.myMelds.map(m => meldStr(m, obs.dealerSeat)).join(' ')}`);
   }
   if (obs.myRiichi) {
     lines.push(`  リーチ中`);
@@ -66,18 +82,25 @@ export function buildPrompt(obs: Observation, actions: Action[], seatName: strin
     lines.push(`  フリテン`);
   }
 
+  // 自分の捨て牌履歴
+  const myPlayer = obs.players.find(p => p.seat === obs.seat);
+  if (myPlayer && myPlayer.discards.length > 0) {
+    lines.push(`  自捨て: ${discardHistoryStr(myPlayer.discards)}`);
+  }
+
   lines.push('');
-  lines.push('【他家情報】');
+  lines.push('【他家の捨て牌・副露履歴】');
+  lines.push('  記号: [リ]=リーチ宣言牌 (ツ)=ツモ切り ★=鳴かれた牌');
 
   for (const p of obs.players) {
     if (p.seat === obs.seat) continue;
     const w = SEAT_WIND[(p.seat - obs.dealerSeat + 4) % 4]!;
-    const riichiMark = p.riichi ? ' [リーチ]' : '';
-    const meldsPart = p.melds.length > 0 ? ` 副露: ${p.melds.map(meldStr).join(' ')}` : '';
-    const discPart = p.discards.length > 0
-      ? ` 河: ${p.discards.slice(-6).map(d => tileStr(d.tile) + (d.calledBy !== null ? '★' : '')).join(' ')}`
-      : '';
-    lines.push(`  ${w}家(seat ${p.seat}) 点数: ${p.score}${riichiMark}${meldsPart}${discPart}`);
+    const riichiMark = p.riichi ? ' [リーチ中]' : '';
+    lines.push(`  ${w}家(seat ${p.seat}) 点数:${p.score}${riichiMark}`);
+    if (p.melds.length > 0) {
+      lines.push(`    副露: ${p.melds.map(m => meldStr(m, obs.dealerSeat)).join(' ')}`);
+    }
+    lines.push(`    捨て牌: ${discardHistoryStr(p.discards)}`);
   }
 
   lines.push('');
@@ -87,7 +110,9 @@ export function buildPrompt(obs: Observation, actions: Action[], seatName: strin
   }
 
   lines.push('');
-  lines.push('THINK: <1-2 sentence reasoning> ACTION: <number>');
+  lines.push('以下の形式で回答してください:');
+  lines.push('ACTION: <番号>');
+  lines.push('REASON: <選んだ行動とその理由（例: 「9万を切ります。孤立牌で手に不要なため。」）>');
 
   return lines.join('\n');
 }

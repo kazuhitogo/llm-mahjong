@@ -29,7 +29,7 @@ const SELECT_ACTION_TOOL = {
       properties: {
         reasoning: {
           type: 'string',
-          description: 'Step-by-step reasoning about the game state and why you chose this action.',
+          description: 'Explain the chosen action and why (e.g. "9万を切ります。孤立牌で手に不要なため。").',
         },
         action_number: {
           type: 'integer',
@@ -154,14 +154,12 @@ export class OllamaAgent implements Player {
   }
 
   private async _tryCot(prompt: string, actions: Action[]): Promise<DecideResult> {
-    const cotPrompt = prompt + '\n\nFormat your response as:\nTHINK: <your reasoning>\nACTION: <number>';
-
     const messages: OllamaMessage[] = [
       {
         role: 'system',
-        content: 'You are a mahjong AI. Think step by step then select one action number.',
+        content: 'You are a mahjong AI. Select one action number and explain why.',
       },
-      { role: 'user', content: cotPrompt },
+      { role: 'user', content: prompt },
     ];
 
     const data = await this._callOllama(messages, false);
@@ -174,8 +172,9 @@ export class OllamaAgent implements Player {
   }
 
   private _parseCot(text: string, actions: Action[]): DecideResult {
-    const thinkMatch = text.match(/THINK:\s*([\s\S]*?)(?=ACTION:|$)/i);
-    const reasoning = thinkMatch?.[1]?.trim() ?? '';
+    // Parse ACTION: N then REASON: ...
+    const reasonMatch = text.match(/REASON:\s*([\s\S]*?)$/i);
+    const reasoning = reasonMatch?.[1]?.trim() ?? '';
 
     const withReasoning = (action: Action): DecideResult => {
       const r: DecideResult = { action };
