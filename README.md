@@ -11,7 +11,18 @@ pnpm install
 pnpm test          # Vitest
 pnpm typecheck     # tsc --noEmit
 pnpm build         # tsup でビルド
-pnpm cli           # CLI ハーネスで対局
+pnpm cli           # デバッグ用 CLI（ランダム打牌 / --human 0 で人間参加）
+pnpm match         # LLM エージェント同士の半荘対局
+pnpm viewer        # 対局ログビューア（ブラウザ）
+```
+
+### pnpm match オプション
+
+```bash
+pnpm match                                         # デフォルト4モデルで対局
+pnpm match --models "gemma4:e2b,gemma4:e2b,gemma4:e2b,gemma4:e2b"  # モデル指定
+pnpm match --seed 42                               # 乱数シード固定
+pnpm match --log-file logs/my.json                 # ログ保存先指定
 ```
 
 ## ロードマップ

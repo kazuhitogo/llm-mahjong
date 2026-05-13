@@ -248,9 +248,11 @@ export class GameEngine {
     this.state.history.push({ kind: 'draw', seat, tile });
   }
 
-  applyAction(seat: Seat, action: Action, reasoning?: string): void {
+  applyAction(seat: Seat, action: Action, reasoning?: string, prompt?: string): void {
     if (reasoning) {
-      this.state.history.push({ kind: 'think', seat, reasoning });
+      const thinkEv: { kind: 'think'; seat: Seat; reasoning: string; prompt?: string } = { kind: 'think', seat, reasoning };
+      if (prompt) thinkEv.prompt = prompt;
+      this.state.history.push(thinkEv);
     }
     const phase = this.state.turn.phase;
 

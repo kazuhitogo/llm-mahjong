@@ -5,6 +5,7 @@ import type { Seat } from '../types/seat.js';
 export interface DecideResult {
   action: Action;
   reasoning?: string;
+  prompt?: string;
 }
 
 export interface Player {

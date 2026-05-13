@@ -199,6 +199,20 @@ export default function App() {
                 {snap.description}
               </div>
             )}
+            {snap?.prompt && (
+              <details style={{ marginTop: 4 }}>
+                <summary style={{ fontSize: 11, color: '#888', cursor: 'pointer', userSelect: 'none' }}>
+                  入力プロンプト表示
+                </summary>
+                <pre style={{
+                  margin: '4px 0 0', fontSize: 10, background: '#f5f5f5', border: '1px solid #ddd',
+                  borderRadius: 4, padding: '6px 8px', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                  maxHeight: 300, overflow: 'auto', color: '#333',
+                }}>
+                  {snap.prompt}
+                </pre>
+              </details>
+            )}
           </div>
 
           {/* 麻雀卓 */}

@@ -4,7 +4,6 @@
  * 起動例:
  *   pnpm match
  *   pnpm match --models "gemma4:e2b,gemma4:e2b,qwen3.5:9b,qwen3-vl:8b" --seed 42
- *   pnpm match --verbose
  */
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -21,7 +20,6 @@ const DEFAULT_MODELS = ['gemma4:e2b', 'gemma4:e2b', 'gemma3:4b-it-qat', 'gemma3:
 interface MatchOptions {
   models: [string, string, string, string];
   seed: number;
-  verbose: boolean;
   baseUrl: string;
   timeoutMs: number;
   logFile: string | null;
@@ -31,7 +29,6 @@ function parseArgs(argv: string[]): MatchOptions {
   const opts: MatchOptions = {
     models: [...DEFAULT_MODELS] as [string, string, string, string],
     seed: Date.now() & 0x7fffffff,
-    verbose: false,
     baseUrl: 'http://localhost:11434',
     timeoutMs: 120000,
     logFile: null,
@@ -45,8 +42,6 @@ function parseArgs(argv: string[]): MatchOptions {
       opts.models = parts as [string, string, string, string];
     } else if (a === '--seed') {
       opts.seed = Number(argv[++i]!) | 0;
-    } else if (a === '--verbose' || a === '-v') {
-      opts.verbose = true;
     } else if (a === '--base-url') {
       opts.baseUrl = argv[++i]!;
     } else if (a === '--timeout') {
@@ -54,7 +49,7 @@ function parseArgs(argv: string[]): MatchOptions {
     } else if (a === '--log-file') {
       opts.logFile = argv[++i]!;
     } else if (a === '--help' || a === '-h') {
-      console.log('Usage: pnpm match [--models M0,M1,M2,M3] [--seed N] [--verbose] [--log-file PATH]');
+      console.log('Usage: pnpm match [--models M0,M1,M2,M3] [--seed N] [--log-file PATH]');
       process.exit(0);
     }
   }
@@ -68,7 +63,6 @@ const SEAT_WIND_FROM_DEALER = (seat: number, dealer: number) =>
 async function playKyoku(
   hanchan: HanchanEngine,
   players: Player[],
-  verbose: boolean,
 ): Promise<void> {
   const engine = hanchan.engine;
   const { round, dealerSeat } = engine.state;
@@ -92,13 +86,8 @@ async function playKyoku(
       const acts = engine.legalActions(seat);
       if (acts.length === 0) { engine.step(); continue; }
 
-      const { action: chosen, reasoning } = await players[seat]!.decide(obs, acts);
-      if (verbose) {
-        const wj = SEAT_WIND_FROM_DEALER(seat, dealerSeat);
-        if (reasoning) console.log(`  [${wj}家:${players[seat]!.name}] 思考: ${reasoning.slice(0, 120)}`);
-        console.log(`  [${wj}家:${players[seat]!.name}] → ${actionSummary(chosen)}`);
-      }
-      engine.applyAction(seat, chosen, reasoning);
+      const { action: chosen, reasoning, prompt } = await players[seat]!.decide(obs, acts);
+      engine.applyAction(seat, chosen, reasoning, prompt);
       continue;
     }
 
@@ -109,13 +98,8 @@ async function playKyoku(
         const acts = engine.legalActions(pc.seat);
         if (acts.length === 0) { engine.applyAction(pc.seat, { kind: 'pass' }); continue; }
 
-        const { action: chosen, reasoning } = await players[pc.seat]!.decide(obs, acts);
-        if (verbose) {
-          const wj = SEAT_WIND_FROM_DEALER(pc.seat, dealerSeat);
-          if (reasoning) console.log(`  [${wj}家:${players[pc.seat]!.name}] 思考: ${reasoning.slice(0, 120)}`);
-          console.log(`  [${wj}家:${players[pc.seat]!.name}] call → ${actionSummary(chosen)}`);
-        }
-        engine.applyAction(pc.seat, chosen, reasoning);
+        const { action: chosen, reasoning, prompt } = await players[pc.seat]!.decide(obs, acts);
+        engine.applyAction(pc.seat, chosen, reasoning, prompt);
       }
       continue;
     }
@@ -169,7 +153,6 @@ async function main(): Promise<void> {
       seat: i as Seat,
       model,
       baseUrl: opts.baseUrl,
-      verbose: opts.verbose,
       timeoutMs: opts.timeoutMs,
     }),
   );
@@ -182,7 +165,7 @@ async function main(): Promise<void> {
   let kyokuCount = 0;
   let safety = 200;
   while (!hanchan.isGameOver() && safety-- > 0) {
-    await playKyoku(hanchan, players, opts.verbose);
+    await playKyoku(hanchan, players);
     if (!hanchan.isGameOver()) hanchan.advanceKyoku();
     kyokuCount++;
   }

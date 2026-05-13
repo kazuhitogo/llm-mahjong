@@ -28,6 +28,7 @@ export interface ViewerSnapshot {
   eventIndex: number;
   event: GameEvent;
   description: string;
+  prompt?: string;
   round: { wind: string; kyoku: number; honba: number; riichiSticks: number };
   dealerSeat: number;
   players: [ViewerPlayer, ViewerPlayer, ViewerPlayer, ViewerPlayer];
@@ -285,6 +286,7 @@ export function buildSnapshots(
       eventIndex: i,
       event: ev,
       description: describeEvent(ev),
+      prompt: ev.kind === 'think' ? ev.prompt : undefined,
       round: { ...round },
       dealerSeat,
       players: players.map(p => ({

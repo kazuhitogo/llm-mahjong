@@ -47,7 +47,6 @@ export interface OllamaAgentOptions {
   model: string;
   baseUrl?: string;
   timeoutMs?: number;
-  verbose?: boolean;
 }
 
 export class OllamaAgent implements Player {
@@ -56,7 +55,6 @@ export class OllamaAgent implements Player {
   private model: string;
   private baseUrl: string;
   private timeoutMs: number;
-  private verbose: boolean;
   private _toolUseSupported = true;
 
   constructor(opts: OllamaAgentOptions) {
@@ -65,7 +63,6 @@ export class OllamaAgent implements Player {
     this.name = `${opts.model}@seat${opts.seat}`;
     this.baseUrl = opts.baseUrl ?? 'http://localhost:11434';
     this.timeoutMs = opts.timeoutMs ?? 120000;
-    this.verbose = opts.verbose ?? false;
   }
 
   async decide(obs: Observation, actions: Action[]): Promise<DecideResult> {
@@ -73,17 +70,16 @@ export class OllamaAgent implements Player {
 
     const prompt = buildPrompt(obs, actions, this.name);
 
-    if (this.verbose) {
-      console.log(`\n[${this.name}] プロンプト:\n${prompt}`);
-    }
+    console.log(`\n[${this.name}] プロンプト:\n${prompt}`);
+    process.stdout.write(`  [${this.name}] thinking...`);
 
     const result = (this._toolUseSupported ? await this._tryToolUse(prompt, actions) : null)
       ?? await this._tryCot(prompt, actions);
 
-    if (this.verbose) {
-      if (result.reasoning) console.log(`[${this.name}] 思考: ${result.reasoning}`);
-      console.log(`[${this.name}] → ${result.action.kind}`);
-    }
+    result.prompt = prompt;
+
+    if (result.reasoning) console.log(`\n[${this.name}] 思考: ${result.reasoning}`);
+    process.stdout.write(` → ${result.action.kind}\n`);
 
     return result;
   }
@@ -113,7 +109,10 @@ export class OllamaAgent implements Player {
         });
         clearTimeout(timer);
         if (!res.ok) {
-          if (res.status === 400 && useTools) this._toolUseSupported = false;
+          if (res.status === 400 && useTools) {
+            this._toolUseSupported = false;
+            return null;
+          }
           throw new Error(`Ollama HTTP ${res.status}`);
         }
         return await res.json() as OllamaChatResponse;
@@ -166,7 +165,6 @@ export class OllamaAgent implements Player {
     if (!data) return this._fallback(actions);
 
     const text = data.message?.content ?? '';
-    if (this.verbose) console.log(`[${this.name}] raw: ${text.trim()}`);
 
     return this._parseCot(text, actions);
   }
