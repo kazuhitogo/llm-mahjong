@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 import type { ViewerPlayer } from '../viewer-state.js';
-import { SeatArea } from './SeatArea.js';
+import { DiscardPart, HandPart } from './SeatArea.js';
 import { WallStrip } from './WallStrip.js';
 
 interface Props {
@@ -13,10 +13,12 @@ interface Props {
 }
 
 const SIZE = 720;
-const R_HAND = 352; // 手牌の下端を卓端付近へ
-// 山は各辺 17 牌 ≈ 306px（±153）。中心から 190px に置くと 4 辺が重ならず、
-// 中央パネルから離れてプレイヤー側に寄る。
-const R_WALL = 190;
+
+// 中心からの距離（各要素のTOPエッジをここに固定）。
+// 中心 → 河 → 山 → 手牌 の順でプレイヤー側へ伸びる。
+const R_DISCARD = 102; // 河の先頭（中央パネル直外）
+const R_WALL    = 182; // 山の先頭（河の最大3行分=75px後）
+const R_HAND    = 234; // 手牌の先頭（山2行=49px後）
 
 export function TableLayout({ players, seatAt, povSeat, showAll, remainingDraws, center }: Props) {
   const containerStyle: CSSProperties = {
@@ -35,45 +37,51 @@ export function TableLayout({ players, seatAt, povSeat, showAll, remainingDraws,
     overflow: 'hidden',
   };
 
+  // SIZE×SIZE の回転ラッパー。中心で回転し、子を position:absolute で配置する。
+  // 子に top: SIZE/2 + R を指定すると、R が「中心からの距離（その方向）」になる。
+  const wrapStyle = (deg: number): CSSProperties => ({
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    width: SIZE,
+    height: SIZE,
+    transform: `translate(-50%, -50%) rotate(${deg}deg)`,
+    pointerEvents: 'none',
+  });
+
+  // R を top: に変換し、水平方向は常に中央揃え。
+  const child = (R: number): CSSProperties => ({
+    position: 'absolute',
+    top: SIZE / 2 + R,
+    left: '50%',
+    transform: 'translateX(-50%)',
+  });
+
   const wallPerSide = Math.min(34, Math.round(remainingDraws / 4));
 
-  // seatAt.bottom = povSeat（自家を手前）。右=下家, 上=対面, 左=上家。
   const seats = [
     { seat: seatAt.bottom, deg: 0 },
-    { seat: seatAt.right, deg: -90 },
-    { seat: seatAt.top, deg: 180 },
-    { seat: seatAt.left, deg: 90 },
+    { seat: seatAt.right,  deg: -90 },
+    { seat: seatAt.top,    deg: 180 },
+    { seat: seatAt.left,   deg: 90 },
   ];
-
-  const seatStyle = (deg: number): CSSProperties => ({
-    position: 'absolute',
-    left: '50%',
-    top: '50%',
-    transformOrigin: 'center center',
-    transform: `translate(-50%, -50%) rotate(${deg}deg) translateY(calc(${R_HAND}px - 50%))`,
-  });
-
-  const wallStyle = (deg: number): CSSProperties => ({
-    position: 'absolute',
-    left: '50%',
-    top: '50%',
-    transformOrigin: 'center center',
-    transform: `translate(-50%, -50%) rotate(${deg}deg) translateY(${R_WALL}px)`,
-  });
 
   return (
     <div style={containerStyle}>
-      {[0, -90, 180, 90].map((deg, i) => (
-        <div key={`w${i}`} style={wallStyle(deg)}>
-          <WallStrip remaining={wallPerSide} />
-        </div>
-      ))}
-      {seats.map((s, i) => (
-        <div key={`s${i}`} style={seatStyle(s.deg)}>
-          <SeatArea player={players[s.seat]!} isPov={s.seat === povSeat} showAll={showAll} />
-        </div>
-      ))}
       {center}
+      {seats.map((s, i) => (
+        <div key={i} style={wrapStyle(s.deg)}>
+          <div style={child(R_DISCARD)}>
+            <DiscardPart discards={players[s.seat]!.discards} />
+          </div>
+          <div style={child(R_WALL)}>
+            <WallStrip remaining={wallPerSide} />
+          </div>
+          <div style={child(R_HAND)}>
+            <HandPart player={players[s.seat]!} isPov={s.seat === povSeat} showAll={showAll} />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
