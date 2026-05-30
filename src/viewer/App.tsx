@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import type { CSSProperties, ChangeEvent } from 'react';
 import { buildSnapshots, type GameLog, type ViewerSnapshot } from './viewer-state.js';
 import { TableLayout } from './components/TableLayout.js';
-import { SidePanel } from './components/SidePanel.js';
 import { CenterInfo } from './components/CenterInfo.js';
 
 function kyokuLabel(ev: GameLog['kyoku'][number]): string {
@@ -218,49 +217,12 @@ export default function App() {
           {/* 麻雀卓 */}
           {snap && (
             <TableLayout
-              bottom={
-                <SidePanel
-                  player={snap.players[seatAt.bottom]!}
-                  seat={seatAt.bottom}
-                  dealerSeat={snap.dealerSeat}
-                  isPov={true}
-                  showAll={showAll}
-                  score={snap.scores[seatAt.bottom]!}
-                />
-              }
-              top={
-                <SidePanel
-                  player={snap.players[seatAt.top]!}
-                  seat={seatAt.top}
-                  dealerSeat={snap.dealerSeat}
-                  isPov={false}
-                  showAll={showAll}
-                  score={snap.scores[seatAt.top]!}
-                />
-              }
-              left={
-                <SidePanel
-                  player={snap.players[seatAt.left]!}
-                  seat={seatAt.left}
-                  dealerSeat={snap.dealerSeat}
-                  isPov={false}
-                  showAll={showAll}
-                  score={snap.scores[seatAt.left]!}
-                />
-              }
-              right={
-                <SidePanel
-                  player={snap.players[seatAt.right]!}
-                  seat={seatAt.right}
-                  dealerSeat={snap.dealerSeat}
-                  isPov={false}
-                  showAll={showAll}
-                  score={snap.scores[seatAt.right]!}
-                />
-              }
-              center={
-                <CenterInfo snap={snap} seatAt={seatAt} />
-              }
+              players={snap.players}
+              seatAt={seatAt}
+              povSeat={povSeat}
+              showAll={showAll}
+              remainingDraws={snap.wallRemaining}
+              center={<CenterInfo snap={snap} seatAt={seatAt} />}
             />
           )}
 
