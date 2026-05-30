@@ -16,18 +16,18 @@ LLM エージェント同士が対戦する日本リーチ麻雀エンジン（T
 | `docs/rules.md` | 天鳳ルール・牌表現・壁山構造の詳細 |
 | `docs/engine.md` | GameState・ターンフロー・アクション API・フリテン |
 | `docs/scoring.md` | 役判定・点数計算・半荘進行・連荘判定の詳細 |
-| `docs/viewer.md` | Viewer 現行アーキテクチャ（Phase 5 完了済み） |
-| `docs/viewer-phase6.md` | **Phase 6 実装仕様**（ビジュアルリニューアル、コードスニペット込み） |
+| `docs/viewer.md` | Viewer 現行アーキテクチャ（卓レイアウト・牌/鳴き描画・UI） |
 
 ---
 
 ## 現在のフォーカス
 
-**Phase 6 — Viewer ビジュアルリニューアル**
+Phase 6（Viewer ビジュアルリニューアル）完了。残タスクなし。
+
+新フェーズ着手時:
 
 1. `PLAN.md` でタスク一覧と実装順序を確認
-2. `docs/viewer-phase6.md` で各ファイルの実装詳細を確認
-3. 必要に応じて `docs/viewer.md` で現行アーキテクチャを参照
+2. 関連 docs（viewer 変更時は `docs/viewer.md`）で現行アーキテクチャを参照
 
 ---
 

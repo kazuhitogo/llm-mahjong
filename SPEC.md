@@ -47,8 +47,7 @@ src/
 | [`docs/rules.md`](./docs/rules.md) | 天鳳鳳凰卓ルール・牌表現・壁山構造 |
 | [`docs/engine.md`](./docs/engine.md) | GameState 型・ターンフロー・アクション API・フリテン・ログ |
 | [`docs/scoring.md`](./docs/scoring.md) | 役判定・点数計算・半荘進行・連荘判定 |
-| [`docs/viewer.md`](./docs/viewer.md) | Viewer 現行アーキテクチャ（Phase 5 完了済み） |
-| [`docs/viewer-phase6.md`](./docs/viewer-phase6.md) | **Phase 6 実装仕様**（ビジュアルリニューアル） |
+| [`docs/viewer.md`](./docs/viewer.md) | Viewer 現行アーキテクチャ（卓レイアウト・牌/鳴き描画・UI） |
 
 ---
 
