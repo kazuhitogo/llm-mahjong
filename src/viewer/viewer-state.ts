@@ -15,6 +15,9 @@ export interface ViewerDiscard {
 export interface ViewerMeld {
   kind: 'pon' | 'chi' | 'daiminkan' | 'ankan' | 'kakan';
   tiles: Tile[];
+  calledTile: Tile | null; // 鳴いて入手し横向き表示する牌（暗槓は null）
+  from: number | null;     // 鳴いた相手の相対位置 1=下家 2=対面 3=上家（暗槓は null）
+  addedTile?: Tile;        // 加槓で追加した牌（横向き牌の上に重ねる）
 }
 
 export interface ViewerPlayer {
@@ -205,23 +208,33 @@ export function buildSnapshots(
 
       case 'meld': {
         const p = players[ev.seat]!;
-        const meld: ViewerMeld = { kind: ev.meldKind, tiles: [...ev.tiles] };
 
         if (ev.meldKind === 'ankan') {
+          const meld: ViewerMeld = { kind: 'ankan', tiles: [...ev.tiles], calledTile: null, from: null };
           const newHand = removeTilesFromHand(p.hand, ev.tiles);
           players[ev.seat] = { ...p, hand: newHand, melds: [...p.melds, meld] };
         } else if (ev.meldKind === 'kakan') {
-          // Remove 1 tile from hand, replace existing pon meld
+          // Remove 1 tile from hand, replace existing pon meld（元ポンの横向き情報を引き継ぐ）
           const addedTile = ev.tiles[ev.tiles.length - 1]!;
           const newHand = removeOneTile(p.hand, addedTile);
-          const newMelds = p.melds.map(m =>
-            m.kind === 'pon' && tileKind(m.tiles[0]!) === tileKind(ev.tiles[0]!) ? meld : m
+          const pon = p.melds.find(
+            m => m.kind === 'pon' && tileKind(m.tiles[0]!) === tileKind(ev.tiles[0]!)
           );
+          const meld: ViewerMeld = {
+            kind: 'kakan',
+            tiles: [...ev.tiles],
+            calledTile: pon?.calledTile ?? null,
+            from: pon?.from ?? null,
+            addedTile,
+          };
+          const newMelds = p.melds.map(m => (m === pon ? meld : m));
           if (!newMelds.some(m => m === meld)) newMelds.push(meld);
           players[ev.seat] = { ...p, hand: newHand, melds: newMelds };
         } else {
           // pon / chi / daiminkan
           const calledTile = lastDiscardTile!;
+          const from = lastDiscardSeat !== null ? (lastDiscardSeat - ev.seat + 4) % 4 : null;
+          const meld: ViewerMeld = { kind: ev.meldKind, tiles: [...ev.tiles], calledTile, from };
           const fromHand = callerHandTiles(ev.tiles, calledTile);
           const newHand = removeTilesFromHand(p.hand, fromHand);
           players[ev.seat] = { ...p, hand: newHand, melds: [...p.melds, meld] };
