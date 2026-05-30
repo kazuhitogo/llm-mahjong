@@ -10,7 +10,6 @@ interface Props {
   isPov: boolean;
   showAll: boolean;
   score: number;
-  modelName?: string;
 }
 
 const WINDS = ['東', '南', '西', '北'] as const;

@@ -13,6 +13,7 @@ interface GameState {
   pendingCalls: PendingCall[];
   chiKuikaeKinds: number[];  // チー後の打牌禁止 TileKind 値
   history: GameEvent[];
+  rngSeed: number;
 }
 
 interface PlayerState {

@@ -107,13 +107,10 @@ export interface WallState {
 
 /** 局の進行 phase */
 export type GamePhase =
-  | 'deal'         // 配牌中
   | 'draw'         // ツモ待ち
   | 'discard'      // 打牌待ち（手牌 14 枚）
   | 'call'         // 他家の打牌に対する鳴き宣言受付
-  | 'agari'        // 和了確定
-  | 'ryukyoku'     // 流局確定
-  | 'end';         // 局終了
+  | 'end';         // 局終了（和了・流局を含む）
 
 /** call phase での鳴き待ちエントリ */
 export interface PendingCall {
