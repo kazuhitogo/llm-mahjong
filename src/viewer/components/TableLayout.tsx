@@ -15,10 +15,11 @@ interface Props {
 const SIZE = 720;
 
 // 中心からの距離（各要素のTOPエッジをここに固定）。
-// 中心 → 河 → 山 → 手牌 の順でプレイヤー側へ伸びる。
-const R_DISCARD = 102; // 河の先頭（中央パネル直外）
-const R_WALL    = 182; // 山の先頭（河の最大3行分=75px後）
-const R_HAND    = 234; // 手牌の先頭（山2行=49px後）
+// 中心 → 河 → 山 → 手牌 の順でプレイヤー側へ伸びる。padding を挟んで重ならせない。
+// 河は 3〜4 行（最大 ≈99px）、山は 2 行（≈49px）。
+const R_DISCARD = 100; // 河の先頭（中央パネル直外）
+const R_WALL    = 212; // 山の先頭（河4行+padding）
+const R_HAND    = 280; // 手牌の先頭（山2行+padding）
 
 export function TableLayout({ players, seatAt, povSeat, showAll, remainingDraws, center }: Props) {
   const containerStyle: CSSProperties = {

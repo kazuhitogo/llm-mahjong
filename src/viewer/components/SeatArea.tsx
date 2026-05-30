@@ -17,11 +17,15 @@ function SideTile({ tile }: { tile: string }) {
   return <div style={wrap}><div style={inner}><FrontTile tile={tile} /></div></div>;
 }
 
-// 河（捨て牌）。各プレイヤーの卓中央寄りに独立配置する。
+// 河（捨て牌）。3×6 を基本とし、左上から詰める（固定幅・左揃え）。
+// 19 牌目以降は 4 行目へ折り返す。
+const DISCARD_COLS = 6;
+const DISCARD_WIDTH = DISCARD_COLS * TILE_W + (DISCARD_COLS - 1); // 6 列分の固定幅
+
 export function DiscardPart({ discards }: { discards: ViewerDiscard[] }) {
-  const rows = chunk(discards, 6);
+  const rows = chunk(discards, DISCARD_COLS);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 1, width: DISCARD_WIDTH }}>
       {rows.map((row, ri) => (
         <div key={ri} style={{ display: 'flex', gap: 1 }}>
           {row.map((d, di) => (
