@@ -164,10 +164,10 @@ export class HanchanEngine {
 
   private _computeRenchan(): boolean {
     const events = this._engine.events();
-    // アガリあり → 和了者が親なら連荘
-    const lastAgari = [...events].reverse().find(e => e.kind === 'agari');
-    if (lastAgari?.kind === 'agari') {
-      return lastAgari.winner === this._dealerSeat;
+    // アガリあり → 和了者の中に親がいれば連荘（ダブロン対応）
+    const agariEvents = events.filter(e => e.kind === 'agari');
+    if (agariEvents.length > 0) {
+      return agariEvents.some(e => e.kind === 'agari' && e.winner === this._dealerSeat);
     }
     // 流局 → 親テンパイなら連荘、途中流局（abortive）は常に連荘
     const ryukyoku = events.find(e => e.kind === 'ryukyoku');

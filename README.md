@@ -2,34 +2,44 @@
 
 LLM エージェント同士が対戦する日本リーチ麻雀エンジン。
 
-詳細仕様は [SPEC.md](./SPEC.md) を参照。
+## 必要なもの
 
-## 開発
+- Node.js 20+、pnpm
+- [Ollama](https://ollama.ai)（LLM 対局時）
+  - `ollama pull gemma4:e2b`
+  - `ollama pull gemma3:4b-it-qat`
+
+## クイックスタート
 
 ```bash
 pnpm install
-pnpm test          # Vitest
-pnpm typecheck     # tsc --noEmit
-pnpm build         # tsup でビルド
-pnpm cli           # デバッグ用 CLI（ランダム打牌 / --human 0 で人間参加）
-pnpm match         # LLM エージェント同士の半荘対局
+pnpm test          # 全テスト（124件）
+pnpm match         # LLM 4エージェント半荘対局（Ollama 必要）
 pnpm viewer        # 対局ログビューア（ブラウザ）
 ```
 
-### pnpm match オプション
+## コマンド一覧
 
 ```bash
-pnpm match                                         # デフォルト4モデルで対局
-pnpm match --models "gemma4:e2b,gemma4:e2b,gemma4:e2b,gemma4:e2b"  # モデル指定
-pnpm match --seed 42                               # 乱数シード固定
-pnpm match --log-file logs/my.json                 # ログ保存先指定
+pnpm cli           # デバッグ用 CLI（--human 0 で人間参加）
+pnpm typecheck     # TypeScript 型チェック
+pnpm build         # tsup でビルド
+
+# match オプション
+pnpm match --models "gemma4:e2b,gemma4:e2b,gemma4:e2b,gemma4:e2b"
+pnpm match --seed 42
+pnpm match --log-file logs/my.json
 ```
 
-## ロードマップ
+## ビューア
 
-- **Phase 1** — エンジン MVP（鳴き・リーチ・和了なしの最小フロー、CLI で人間操作）
-- **Phase 2** — 完全な 1 局（鳴き・リーチ・役・点数）
-- **Phase 3** — 半荘進行（連荘・本場・ログ）
-- **Phase 4** — エージェントレイヤ（HumanCli / ScriptedBot / LlmAgent）
+`pnpm match --log-file logs/game.json` で対局ログを保存後、`pnpm viewer` でブラウザを開いてファイルを読み込む。
 
-ライセンス: MIT
+- 局タブで局を切り替え
+- ◀▶ ボタンまたは ← → キーでステップ送り
+- POV 選択で視点を切り替え
+- 「全開示」で全プレイヤーの手牌を表示
+
+## ライセンス
+
+MIT

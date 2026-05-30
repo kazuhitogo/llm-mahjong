@@ -212,9 +212,9 @@ export class GameEngine {
     const seat = this.state.turn.seat;
     const drawn = drawTile(this.state.wall);
     if (!drawn) {
-      this.applyNagashiMangan();
+      const nagashiFired = this.applyNagashiMangan();
       const tenpaiSeats = this.detectTenpaiSeats();
-      if (tenpaiSeats.length > 0 && tenpaiSeats.length < 4) {
+      if (!nagashiFired && tenpaiSeats.length > 0 && tenpaiSeats.length < 4) {
         for (const { seat: s, delta } of computeNotenPayout(tenpaiSeats)) {
           this.state.players[s].score += delta;
         }
@@ -510,6 +510,23 @@ export class GameEngine {
       });
       this.doDiscard(seat, replacement.tile, true);
       return;
+    }
+
+    if (this.calc) {
+      const tileIdx = player.hand.indexOf(tile);
+      const handAfterDiscard = [...player.hand.slice(0, tileIdx), ...player.hand.slice(tileIdx + 1)];
+      const waits = this.calc.waitTiles(handAfterDiscard, player.melds);
+      if (waits.length === 0) {
+        const replacement = fallbackAction(this.state, seat);
+        this.state.history.push({
+          kind: 'violation', seat,
+          attempted: { kind: 'riichi', tile },
+          reason: 'riichi: not tenpai',
+          replacement,
+        });
+        this.doDiscard(seat, replacement.tile, true);
+        return;
+      }
     }
 
     const isDouble = this.state.turn.junme === 0 && player.discards.length === 0;
@@ -985,10 +1002,11 @@ export class GameEngine {
 
   // ---------- 流し満貫 ----------
 
-  private applyNagashiMangan(): void {
-    if (!this.state.config.nagashiMangan) return;
+  private applyNagashiMangan(): boolean {
+    if (!this.state.config.nagashiMangan) return false;
     const YAOCHUHAI = new Set([0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33]);
 
+    let fired = false;
     for (const player of this.state.players) {
       if (player.melds.length > 0) continue;
       if (player.discards.length === 0) continue;
@@ -1001,7 +1019,9 @@ export class GameEngine {
       this.state.history.push({
         kind: 'agari', winner: player.seat, from: 'tsumo', han: 5, fu: 0, score: 8000,
       });
+      fired = true;
     }
+    return fired;
   }
 
   // ---------- テンパイ検出 ----------
