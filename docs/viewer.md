@@ -56,13 +56,18 @@ interface ViewerMeld {
 ## コンポーネント構成
 
 ```
-App.tsx
-  TableLayout.tsx   卓の外枠（720px 正方形・回転ラッパー方式）
-    DiscardPart     河（SeatArea.tsx）
-    WallStrip.tsx   山（17×2 の寝かせ牌）
-    HandPart        手牌＋鳴き（SeatArea.tsx）
-  CenterInfo.tsx    局情報・点数（中央のダーク角丸パネル）
+App.tsx（3 カラム flex。狭画面では縦積みフォールバック）
+  左カラム(~240px)  タイトル・ログ読込・seed / 局タブ / 再生コントローラー / POV・全開示
+  中央             TableLayout.tsx   卓の外枠（720px 正方形・回転ラッパー方式・位置不動）
+                     DiscardPart     河（SeatArea.tsx）
+                     WallStrip.tsx   山（17×2 の寝かせ牌）
+                     HandPart        手牌＋鳴き（SeatArea.tsx）
+                   CenterInfo.tsx    局情報・点数（中央のダーク角丸パネル）
+  右カラム(~300px)  イベント説明 / 推論(think) / 入力プロンプト（縦スクロール）
 ```
+
+可変高さの要素（説明・推論・プロンプト）は右カラムに隔離し縦スクロールさせる。
+これによりステップ送りで説明高さが変動しても中央の卓は一切動かない。
 
 牌コンポーネント（`Tile.tsx`）。実寸は `TILE_W=18`（短辺）, `TILE_L=24`（表面の長辺）, `TILE_T=11`（伏せ牌の上面）:
 
@@ -105,11 +110,18 @@ const seatAt = { bottom: povSeat, right: (povSeat+1)%4, top: (povSeat+2)%4, left
 
 ## UI コントロール
 
-- 局タブ: `log.kyoku[]` から `init` イベントの局ラベルを生成
+すべて左カラムに集約（卓に高さ影響を与えないため）:
+
+- タイトル・ログ読込（`<label>` で `<input type=file>` を包む）・seed 表示
+- 局タブ: `log.kyoku[]` から `init` イベントの局ラベルを生成（縦並び/折り返し）
 - ⏮◀▶⏭ ボタン + スライダー + ← → / ↑ ↓ / Home / End キー
 - POV 選択（select: seat0〜3）、全開示トグル
+
+右カラム:
+
 - イベント説明文（`viewer-state.ts: describeEvent()`）
-- think イベント: 紫背景で推論テキスト表示、入力プロンプトは折り畳み
+- think イベント: 紫背景で推論テキスト表示
+- 入力プロンプトは折り畳み（`<details>`）。カラム内で縦スクロール
 
 ## ビルド・起動
 
