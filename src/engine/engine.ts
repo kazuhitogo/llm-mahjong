@@ -260,8 +260,8 @@ export class GameEngine {
     model?: string, inputTokens?: number, outputTokens?: number,
   ): void {
     if (reasoning) {
-      const thinkEv: { kind: 'think'; seat: Seat; reasoning: string; prompt?: string; model?: string; inputTokens?: number; outputTokens?: number }
-        = { kind: 'think', seat, reasoning };
+      const thinkEv: { kind: 'think'; seat: Seat; reasoning: string; prompt?: string; model?: string; inputTokens?: number; outputTokens?: number; chosenAction?: Action }
+        = { kind: 'think', seat, reasoning, chosenAction: action };
       if (prompt) thinkEv.prompt = prompt;
       if (model) thinkEv.model = model;
       if (inputTokens != null) thinkEv.inputTokens = inputTokens;

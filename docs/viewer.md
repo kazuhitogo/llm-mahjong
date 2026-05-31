@@ -121,6 +121,7 @@ const seatAt = { bottom: povSeat, right: (povSeat+1)%4, top: (povSeat+2)%4, left
 
 - イベント説明文（`viewer-state.ts: describeEvent()`）
 - think イベント: 紫背景で推論テキスト表示
+- think イベント: 「選択行動」パネル（緑背景）― `chosenAction` を `formatAction()` で整形表示（例: `discard(tile=5m, tsumogiri=false)`）
 - 入力プロンプトは折り畳み（`<details>`）。カラム内で縦スクロール
 
 ## ビルド・起動

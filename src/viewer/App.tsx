@@ -1,8 +1,28 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import type { CSSProperties, ChangeEvent } from 'react';
 import { buildSnapshots, type GameLog, type ViewerSnapshot } from './viewer-state.js';
+import type { Action } from '../types/action.js';
 import { TableLayout } from './components/TableLayout.js';
 import { CenterInfo } from './components/CenterInfo.js';
+
+const WIND_JP = ['東', '南', '西', '北'] as const;
+function seatLabel(s: number): string { return `seat${s}(${WIND_JP[s] ?? s}家)`; }
+
+function describeAction(seat: number, a: Action): string {
+  switch (a.kind) {
+    case 'discard': return `${seatLabel(seat)} 打牌 ${a.tile}${a.tsumogiri ? ' (ツモ切り)' : ''}`;
+    case 'riichi': return `${seatLabel(seat)} リーチ宣言 (${a.tile}切り)`;
+    case 'tsumo': return `${seatLabel(seat)} ツモ和了!`;
+    case 'ron': return `${seatLabel(seat)} ロン和了!`;
+    case 'pon': return `${seatLabel(seat)} ポン [${a.tiles.join(' ')}]`;
+    case 'chi': return `${seatLabel(seat)} チー [${a.tiles.join(' ')}]`;
+    case 'daiminkan': return `${seatLabel(seat)} 大明槓`;
+    case 'ankan': return `${seatLabel(seat)} 暗槓 ${a.tile}`;
+    case 'kakan': return `${seatLabel(seat)} 加槓 ${a.tile}`;
+    case 'kyushu_kyuhai': return `${seatLabel(seat)} 九種九牌`;
+    case 'pass': return `${seatLabel(seat)} パス`;
+  }
+}
 
 function kyokuLabel(ev: GameLog['kyoku'][number]): string {
   const init = ev.events.find(e => e.kind === 'init');
@@ -200,16 +220,22 @@ export default function App() {
 
   const rightColumn = snap && (
     <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{
-        ...panelStyle, fontSize: 12,
-        ...(snap.event.kind === 'think'
-          ? { color: '#555', borderLeft: '4px solid #a8a', background: '#f9f0ff', whiteSpace: 'pre-wrap' }
-          : { color: '#333', borderLeft: '4px solid #4a9' }
-        )
-      }}>
-        {snap.description}
-      </div>
-      {snap.prompt && (
+      {snap.thinkEvent ? (
+        <div style={{ ...panelStyle, borderLeft: '4px solid #a8a', background: '#f9f0ff' }}>
+          <div style={{
+            fontSize: 12, fontWeight: 'bold', color: '#1a4a1a', background: '#e6f4ea',
+            border: '1px solid #9c9', borderRadius: 4, padding: '4px 8px', marginBottom: 8,
+          }}>
+            {snap.description}
+          </div>
+          <div style={{ fontSize: 12, color: '#555', whiteSpace: 'pre-wrap' }}>{snap.thinkEvent.reasoning}</div>
+        </div>
+      ) : (
+        <div style={{ ...panelStyle, fontSize: 12, color: '#333', borderLeft: '4px solid #4a9' }}>
+          {snap.description}
+        </div>
+      )}
+      {snap.thinkEvent?.prompt && (
         <div style={panelStyle}>
           <details open>
             <summary style={{ fontSize: 11, color: '#888', cursor: 'pointer', userSelect: 'none' }}>
@@ -220,7 +246,7 @@ export default function App() {
               borderRadius: 4, padding: '6px 8px', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
               maxHeight: 480, overflow: 'auto', color: '#333',
             }}>
-              {snap.prompt}
+              {snap.thinkEvent.prompt}
             </pre>
           </details>
         </div>

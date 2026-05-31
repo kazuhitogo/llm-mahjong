@@ -27,11 +27,13 @@ export interface ViewerPlayer {
   riichi: boolean;
 }
 
+type ThinkEvent = Extract<GameEvent, { kind: 'think' }>;
+
 export interface ViewerSnapshot {
   eventIndex: number;
   event: GameEvent;
   description: string;
-  prompt?: string;
+  thinkEvent?: ThinkEvent;
   round: { wind: string; kyoku: number; honba: number; riichiSticks: number };
   dealerSeat: number;
   players: [ViewerPlayer, ViewerPlayer, ViewerPlayer, ViewerPlayer];
@@ -245,9 +247,37 @@ export function buildSnapshots(
   const wallRemaining = () => Math.max(0, 122 - Math.max(0, doraIndicators.length - 1) - drawnCount);
   const pendingRiichi = new Set<number>();
   const scores: [number, number, number, number] = [...startScores] as [number, number, number, number];
+  let pendingThink: ThinkEvent | undefined;
 
   for (let i = 0; i < events.length; i++) {
     const ev = events[i]!;
+
+    // think イベントは次の非 think スナップに付加してスキップ
+    if (ev.kind === 'think') {
+      if (pendingThink) {
+        // 連続 think（コールフェーズ）: 先の think（pass）はスナップとして残す
+        snapshots.push({
+          eventIndex: i - 1,
+          event: pendingThink,
+          description: describeEvent(pendingThink),
+          thinkEvent: pendingThink,
+          round: { ...round },
+          dealerSeat,
+          players: players.map(p => ({
+            ...p,
+            hand: [...p.hand],
+            discards: [...p.discards],
+            melds: p.melds.map(m => ({ ...m, tiles: [...m.tiles] })),
+          })) as [ViewerPlayer, ViewerPlayer, ViewerPlayer, ViewerPlayer],
+          wallRemaining: wallRemaining(),
+          scores: [...scores] as [number, number, number, number],
+          dice: [dice[0], dice[1]],
+          wall: { breakSeat, dieSum, drawnCount, doraIndicators: [...doraIndicators] },
+        });
+      }
+      pendingThink = ev;
+      continue;
+    }
 
     switch (ev.kind) {
       case 'init':
@@ -403,11 +433,10 @@ export function buildSnapshots(
       }
     }
 
-    snapshots.push({
+    const snap: ViewerSnapshot = {
       eventIndex: i,
       event: ev,
       description: describeEvent(ev),
-      prompt: ev.kind === 'think' ? ev.prompt : undefined,
       round: { ...round },
       dealerSeat,
       players: players.map(p => ({
@@ -420,7 +449,12 @@ export function buildSnapshots(
       scores: [...scores] as [number, number, number, number],
       dice: [dice[0], dice[1]],
       wall: { breakSeat, dieSum, drawnCount, doraIndicators: [...doraIndicators] },
-    });
+    };
+    if (pendingThink) {
+      snap.thinkEvent = pendingThink;
+      pendingThink = undefined;
+    }
+    snapshots.push(snap);
   }
 
   return snapshots;
