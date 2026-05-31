@@ -111,8 +111,8 @@ export function buildPrompt(obs: Observation, actions: Action[], seatName: strin
 
   lines.push('');
   lines.push('以下の形式で回答してください:');
-  lines.push('ACTION: <番号>');
   lines.push('REASON: <選んだ行動とその理由（例: 「9万を切ります。孤立牌で手に不要なため。」）>');
+  lines.push('ACTION: <番号>');
 
   return lines.join('\n');
 }

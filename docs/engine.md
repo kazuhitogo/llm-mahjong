@@ -98,6 +98,20 @@ interface Observation {
 
 ---
 
+## エージェント出力形式（OllamaAgent）
+
+`buildPrompt()` が生成するプロンプトは CoT を促すため **REASON → ACTION** の順で出力を要求する。
+
+```
+REASON: <選んだ行動とその理由>
+ACTION: <番号>
+```
+
+モデルが Tool Use をサポートする場合は `select_action` ツールを使用（パラメータ: `reasoning`, `action_number` の順）。
+Tool Use 非対応の場合は上記テキスト形式にフォールバックし、`_parseCot()` でパース。
+
+---
+
 ## フリテン
 
 - `isSelfDiscardFuriten`: 過去の捨て牌に待ち牌が含まれる

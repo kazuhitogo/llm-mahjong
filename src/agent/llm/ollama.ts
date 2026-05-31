@@ -25,7 +25,7 @@ const SELECT_ACTION_TOOL = {
   type: 'function',
   function: {
     name: 'select_action',
-    description: 'After thinking about the game situation, select one legal action.',
+    description: 'First explain your reasoning about the game situation, then select one legal action.',
     parameters: {
       type: 'object',
       properties: {
@@ -176,8 +176,8 @@ export class OllamaAgent implements Player {
   }
 
   private _parseCot(text: string, actions: Action[]): DecideResult {
-    // Parse ACTION: N then REASON: ...
-    const reasonMatch = text.match(/REASON:\s*([\s\S]*?)$/i);
+    // REASON: comes before ACTION: — extract text between them
+    const reasonMatch = text.match(/REASON:\s*([\s\S]*?)(?=ACTION:|$)/i);
     const reasoning = reasonMatch?.[1]?.trim() ?? '';
 
     const withReasoning = (action: Action): DecideResult => {
