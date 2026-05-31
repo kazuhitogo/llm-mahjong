@@ -58,7 +58,7 @@ interface PlayerState {
 | action | 条件 |
 |---|---|
 | `discard` | 常に（手牌の枚数が合法） |
-| `riichi` | 未リーチ, score≥1000, テンパイになる牌がある |
+| `riichi` | 未リーチ, **門前**（ankan のみ許容）, score≥1000, テンパイになる牌がある |
 | `tsumo` | 和了形（calc あり） |
 | `ankan` | 手牌に同種4枚（リーチ中不可） |
 | `kakan` | ポン副露あり + 手牌に同種1枚（リーチ中不可） |
@@ -75,7 +75,7 @@ interface PlayerState {
 | `pass` | 常に |
 
 **違反アクション**: 強制ツモ切り（discard の最後の牌）に置換し `violation` イベントを記録。
-リーチ宣言でテンパイにならない牌を指定した場合も violation 扱い。
+リーチ宣言でテンパイにならない牌・門前でない手からのリーチ宣言も violation 扱い。
 
 実装: `src/engine/legal.ts`, `src/engine/engine.ts`
 
@@ -111,18 +111,21 @@ interface Observation {
 ## GameLog（対局ログ）
 
 ```ts
-type GameLog = {
-  version: string;
+interface GameLog {
+  version: 1;
   rngSeed: number;
+  models?: [string, string, string, string]; // seat 順モデル名（pnpm match が記録）
   kyoku: Array<{ kyokuIndex: number; events: GameEvent[] }>;
   standings: FinalStanding[];
-};
+}
 ```
 
-`exportLog(hanchan)` → `serializeLog()` → JSON  
+`exportLog(hanchan, models?)` → `serializeLog()` → JSON  
 `deserializeLog(json)` → `replayKyoku(events, calculator)`
 
 主な `GameEvent.kind`: `init` / `dice` / `deal` / `dora` / `draw` / `rinshan` / `action` / `riichi` / `meld` / `agari` / `ryukyoku` / `violation` / `think`。
 `dora` イベント（`{ kind:'dora'; tile }`）は配牌時の初期ドラと、カンごとのカンドラ公開時に発行。`replayKyoku` は無視（エンジンが内部で再導出するため）。
+
+`think` イベント（`{ kind:'think'; seat; reasoning; prompt?; model?; inputTokens?; outputTokens? }`）は LLM 推論ごとに記録。`model` はエージェント名、`inputTokens`/`outputTokens` は Ollama レスポンスの `prompt_eval_count`/`eval_count`。
 
 実装: `src/log/log.ts`, `src/log/replay.ts`

@@ -98,7 +98,7 @@ const seatAt = { bottom: povSeat, right: (povSeat+1)%4, top: (povSeat+2)%4, left
 
 - **河（DiscardPart）**: 6 列固定幅・左揃え。3×6 を基本とし 19 牌目以降は 4 行目へ折り返す。リーチ宣言牌は黄ハイライト、鳴かれた牌は減光
 - **山（WallStrip / wallStacksForSeat）**: 17×2 段。実麻雀の開門・王牌・ツモ順を再現する。各物理位置（席・右端からのスタック・段）にツモ順 `o`（0=配牌開始, +1 で反時計回り）を割り当て、状態を分類する:
-  - 開門壁では右端から `dieSum+1` スタック目が配牌開始（`o=0`）。王牌（`o≥122`, 14枚）は「右から `dieSum-6`..`dieSum` スタック目」に位置し、右側に live が `dieSum-7` スタック残る。割れ目（ギャップ）は王牌と配牌開始の間。
+  - 開門壁では右端から `dieSum+1` スタック目が配牌開始（`o=0`）。王牌（`o≥122`, 14枚）は割れ目の直右7スタックに配置（T≥7 時）。嶺上牌（`deadIdx 0..3`）= 割れ目に最も近い左2スタック、ドラ表示牌（`deadIdx 4`）= 上段・左から3番目。偶数 deadIdx = 上段（表ドラ位置）、奇数 = 下段（裏ドラ位置）。
   - 非開門壁は壁順 `breakSeat → breakSeat-1 → -2 → -3` で右端(o小)→左端(o大)。
   - `o<drawnCount`=消費済み（薄）、王牌（`o≥122` ＋カン繰り上げ `o≥liveLimit`）=琥珀、ドラ表示牌位置（`deadWall[4],[6],…`）=表向き（`FrontTile`）。嶺上で取られた王牌スロットは消費済み表示で王牌を常に14枚に保つ
 - **手牌（HandPart）**: 自家／全開示は `FrontTile`、他家は `BackTile`。右側に鳴き面子を底辺揃えで並べる
@@ -112,7 +112,7 @@ const seatAt = { bottom: povSeat, right: (povSeat+1)%4, top: (povSeat+2)%4, left
 
 すべて左カラムに集約（卓に高さ影響を与えないため）:
 
-- タイトル・ログ読込（`<label>` で `<input type=file>` を包む）・seed 表示
+- タイトル・ログ読込（`<label>` で `<input type=file>` を包む）・seed 表示・モデル名（`log.models` があるとき seat0〜3 を一覧）
 - 局タブ: `log.kyoku[]` から `init` イベントの局ラベルを生成（縦並び/折り返し）
 - ⏮◀▶⏭ ボタン + スライダー + ← → / ↑ ↓ / Home / End キー
 - POV 選択（select: seat0〜3）、全開示トグル
