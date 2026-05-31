@@ -31,7 +31,7 @@ const SELECT_ACTION_TOOL = {
       properties: {
         reasoning: {
           type: 'string',
-          description: 'Explain the chosen action and why (e.g. "9万を切ります。孤立牌で手に不要なため。").',
+          description: 'Analyze the situation (shanten, waits, opponent danger, rank/score gap) and explain why the chosen action best serves winning 1st place.',
         },
         action_number: {
           type: 'integer',
