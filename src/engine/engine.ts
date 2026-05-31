@@ -147,8 +147,10 @@ export class GameEngine {
     // 打牌 (ツモ和了の次、リーチより先)
     actions.push(...getDiscardCandidates(this.state, seat));
 
-    // リーチ宣言 (未リーチ・score >= 1000) — 打牌の後
-    if (this.calc && !player.riichi && player.score >= 1000) {
+    // リーチ宣言 (未リーチ・門前・score >= 1000) — 打牌の後
+    // 門前は暗槓のみ許容。ポン/チー/大明槓/加槓があると門前破れでリーチ不可。
+    const isMenzen = player.melds.every(m => m.kind === 'ankan');
+    if (this.calc && !player.riichi && isMenzen && player.score >= 1000) {
       try {
         const candidates = this.calc.riichiCandidates(player.hand, player.melds);
         for (const { discard } of candidates) {
@@ -252,10 +254,18 @@ export class GameEngine {
     this.state.history.push({ kind: 'draw', seat, tile });
   }
 
-  applyAction(seat: Seat, action: Action, reasoning?: string, prompt?: string): void {
+  applyAction(
+    seat: Seat, action: Action,
+    reasoning?: string, prompt?: string,
+    model?: string, inputTokens?: number, outputTokens?: number,
+  ): void {
     if (reasoning) {
-      const thinkEv: { kind: 'think'; seat: Seat; reasoning: string; prompt?: string } = { kind: 'think', seat, reasoning };
+      const thinkEv: { kind: 'think'; seat: Seat; reasoning: string; prompt?: string; model?: string; inputTokens?: number; outputTokens?: number }
+        = { kind: 'think', seat, reasoning };
       if (prompt) thinkEv.prompt = prompt;
+      if (model) thinkEv.model = model;
+      if (inputTokens != null) thinkEv.inputTokens = inputTokens;
+      if (outputTokens != null) thinkEv.outputTokens = outputTokens;
       this.state.history.push(thinkEv);
     }
     const phase = this.state.turn.phase;
@@ -504,12 +514,15 @@ export class GameEngine {
   private doRiichiDeclaration(seat: Seat, tile: Tile): void {
     const player = this.state.players[seat];
 
-    if (player.riichi || !player.hand.some(t => t === tile)) {
+    const isMenzen = player.melds.every(m => m.kind === 'ankan');
+    if (player.riichi || !player.hand.some(t => t === tile) || !isMenzen) {
       const replacement = fallbackAction(this.state, seat);
       this.state.history.push({
         kind: 'violation', seat,
         attempted: { kind: 'riichi', tile },
-        reason: 'riichi: invalid',
+        reason: player.riichi ? 'riichi: already in riichi'
+          : !isMenzen ? 'riichi: not menzen'
+          : 'riichi: tile not in hand',
         replacement,
       });
       this.doDiscard(seat, replacement.tile, true);
