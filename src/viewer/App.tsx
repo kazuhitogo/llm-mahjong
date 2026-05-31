@@ -32,6 +32,7 @@ function kyokuLabel(ev: GameLog['kyoku'][number]): string {
 }
 
 type TokenUsage = { in: number; out: number; calls: number };
+type TimeUsage = { totalMs: number; calls: number };
 
 function computeTokenUsage(log: GameLog): [TokenUsage, TokenUsage, TokenUsage, TokenUsage] {
   const usage: [TokenUsage, TokenUsage, TokenUsage, TokenUsage] = [
@@ -49,6 +50,28 @@ function computeTokenUsage(log: GameLog): [TokenUsage, TokenUsage, TokenUsage, T
     }
   }
   return usage;
+}
+
+function computeTimeUsage(log: GameLog): [TimeUsage, TimeUsage, TimeUsage, TimeUsage] {
+  const usage: [TimeUsage, TimeUsage, TimeUsage, TimeUsage] = [
+    { totalMs: 0, calls: 0 }, { totalMs: 0, calls: 0 },
+    { totalMs: 0, calls: 0 }, { totalMs: 0, calls: 0 },
+  ];
+  for (const kyoku of log.kyoku) {
+    for (const ev of kyoku.events) {
+      if (ev.kind !== 'think' || ev.elapsedMs == null) continue;
+      const u = usage[ev.seat];
+      if (!u) continue;
+      u.totalMs += ev.elapsedMs;
+      u.calls += 1;
+    }
+  }
+  return usage;
+}
+
+function fmtMs(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 function computeKyokuStartScores(log: GameLog): [number, number, number, number][] {
@@ -77,6 +100,7 @@ export default function App() {
   );
 
   const tokenUsage = useMemo(() => (log ? computeTokenUsage(log) : null), [log]);
+  const timeUsage = useMemo(() => (log ? computeTimeUsage(log) : null), [log]);
 
   const snapshots = useMemo<ViewerSnapshot[]>(() => {
     if (!log) return [];
@@ -252,6 +276,28 @@ export default function App() {
                 <div style={{ fontSize: 10, color: '#666', borderTop: '1px solid #eee', marginTop: 3, paddingTop: 3 }}>
                   合計 IN {tokenUsage.reduce((s, u) => s + u.in, 0).toLocaleString()}
                   {' / '}OUT {tokenUsage.reduce((s, u) => s + u.out, 0).toLocaleString()}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 思考時間（全局通算） */}
+          {timeUsage && timeUsage.some(u => u.calls > 0) && (
+            <div style={panelStyle}>
+              <strong style={{ fontSize: 12 }}>思考時間（全局通算）</strong>
+              <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                {timeUsage.map((u, i) => (
+                  <div key={i} style={{ fontSize: 10, color: '#444', lineHeight: 1.5 }}>
+                    <span style={{ fontWeight: 'bold' }}>{seatLabel(i)}</span>
+                    <span style={{ marginLeft: 4, color: '#080' }}>合計 {fmtMs(u.totalMs)}</span>
+                    <span style={{ marginLeft: 4, color: '#999' }}>({u.calls}回)</span>
+                    {u.calls > 0 && (
+                      <span style={{ marginLeft: 4, color: '#666' }}>avg {fmtMs(Math.round(u.totalMs / u.calls))}</span>
+                    )}
+                  </div>
+                ))}
+                <div style={{ fontSize: 10, color: '#666', borderTop: '1px solid #eee', marginTop: 3, paddingTop: 3 }}>
+                  合計 {fmtMs(timeUsage.reduce((s, u) => s + u.totalMs, 0))}
                 </div>
               </div>
             </div>

@@ -67,7 +67,7 @@ calculator.waitTiles(hand13, melds): Tile[]
 calculator.calculateShanten(hand, melds): number
 
 // エージェント
-player.decide(obs, legalActions): Promise<{ action, reasoning?, prompt? }>
+player.decide(obs, legalActions): Promise<{ action, reasoning?, prompt?, inputTokens?, outputTokens?, elapsedMs? }>
 ```
 
 ---

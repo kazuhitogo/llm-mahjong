@@ -86,8 +86,10 @@ async function playKyoku(
       const acts = engine.legalActions(seat);
       if (acts.length === 0) { engine.step(); continue; }
 
+      const t0 = Date.now();
       const { action: chosen, reasoning, prompt, inputTokens, outputTokens } = await players[seat]!.decide(obs, acts);
-      engine.applyAction(seat, chosen, reasoning, prompt, players[seat]!.name, inputTokens, outputTokens);
+      const elapsedMs = Date.now() - t0;
+      engine.applyAction(seat, chosen, reasoning, prompt, players[seat]!.name, inputTokens, outputTokens, elapsedMs);
       continue;
     }
 
@@ -98,8 +100,10 @@ async function playKyoku(
         const acts = engine.legalActions(pc.seat);
         if (acts.length === 0) { engine.applyAction(pc.seat, { kind: 'pass' }); continue; }
 
+        const t0 = Date.now();
         const { action: chosen, reasoning, prompt, inputTokens, outputTokens } = await players[pc.seat]!.decide(obs, acts);
-        engine.applyAction(pc.seat, chosen, reasoning, prompt, players[pc.seat]!.name, inputTokens, outputTokens);
+        const elapsedMs = Date.now() - t0;
+        engine.applyAction(pc.seat, chosen, reasoning, prompt, players[pc.seat]!.name, inputTokens, outputTokens, elapsedMs);
       }
       continue;
     }

@@ -124,6 +124,11 @@ const seatAt = { bottom: povSeat, right: (povSeat+1)%4, top: (povSeat+2)%4, left
 - think イベント: 「選択行動」パネル（緑背景）― `chosenAction` を `formatAction()` で整形表示（例: `discard(tile=5m, tsumogiri=false)`）
 - 入力プロンプトは折り畳み（`<details>`）。カラム内で縦スクロール
 
+左カラム（ログ読込後）:
+
+- **トークン使用量（全局通算）**: seat 別に IN / OUT / 回数、合計 IN/OUT を表示（`think.inputTokens` / `outputTokens` を集計）
+- **思考時間（全局通算）**: seat 別に合計時間・回数・平均時間を表示（`think.elapsedMs` を集計）。`elapsedMs` が存在しない古いログでは非表示
+
 ## ビルド・起動
 
 ```bash

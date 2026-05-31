@@ -165,4 +165,4 @@ export type GameEvent =
   | { kind: 'rinshan'; seat: Seat; tile: Tile }
   | { kind: 'dora'; tile: Tile }
   | { kind: 'agari'; winner: Seat; from: Seat | 'tsumo'; han: number; fu: number; score: number; yakuman?: number }
-  | { kind: 'think'; seat: Seat; reasoning: string; prompt?: string; model?: string; inputTokens?: number; outputTokens?: number; chosenAction?: Action };
+  | { kind: 'think'; seat: Seat; reasoning: string; prompt?: string; model?: string; inputTokens?: number; outputTokens?: number; elapsedMs?: number; chosenAction?: Action };

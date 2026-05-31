@@ -150,6 +150,6 @@ interface GameLog {
 主な `GameEvent.kind`: `init` / `dice` / `deal` / `dora` / `draw` / `rinshan` / `action` / `riichi` / `meld` / `agari` / `ryukyoku` / `violation` / `think`。
 `dora` イベント（`{ kind:'dora'; tile }`）は配牌時の初期ドラと、カンごとのカンドラ公開時に発行。`replayKyoku` は無視（エンジンが内部で再導出するため）。
 
-`think` イベント（`{ kind:'think'; seat; reasoning; prompt?; model?; inputTokens?; outputTokens?; chosenAction? }`）は LLM 推論ごとに記録。`model` はエージェント名、`inputTokens`/`outputTokens` は Ollama レスポンスの `prompt_eval_count`/`eval_count`、`chosenAction` は LLM が選択した Action オブジェクト（viewer の「選択行動」欄に表示）。
+`think` イベント（`{ kind:'think'; seat; reasoning; prompt?; model?; inputTokens?; outputTokens?; elapsedMs?; chosenAction? }`）は LLM 推論ごとに記録。`model` はエージェント名、`inputTokens`/`outputTokens` は Ollama レスポンスの `prompt_eval_count`/`eval_count`、`elapsedMs` は `decide()` 呼び出し全体のウォールクロック時間（ms）、`chosenAction` は LLM が選択した Action オブジェクト（viewer の「選択行動」欄に表示）。
 
 実装: `src/log/log.ts`, `src/log/replay.ts`

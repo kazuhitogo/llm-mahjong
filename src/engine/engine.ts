@@ -257,15 +257,16 @@ export class GameEngine {
   applyAction(
     seat: Seat, action: Action,
     reasoning?: string, prompt?: string,
-    model?: string, inputTokens?: number, outputTokens?: number,
+    model?: string, inputTokens?: number, outputTokens?: number, elapsedMs?: number,
   ): void {
     if (reasoning) {
-      const thinkEv: { kind: 'think'; seat: Seat; reasoning: string; prompt?: string; model?: string; inputTokens?: number; outputTokens?: number; chosenAction?: Action }
+      const thinkEv: { kind: 'think'; seat: Seat; reasoning: string; prompt?: string; model?: string; inputTokens?: number; outputTokens?: number; elapsedMs?: number; chosenAction?: Action }
         = { kind: 'think', seat, reasoning, chosenAction: action };
       if (prompt) thinkEv.prompt = prompt;
       if (model) thinkEv.model = model;
       if (inputTokens != null) thinkEv.inputTokens = inputTokens;
       if (outputTokens != null) thinkEv.outputTokens = outputTokens;
+      if (elapsedMs != null) thinkEv.elapsedMs = elapsedMs;
       this.state.history.push(thinkEv);
     }
     const phase = this.state.turn.phase;
