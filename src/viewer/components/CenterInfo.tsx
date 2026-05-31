@@ -9,10 +9,10 @@ interface Props {
 const WIND_JP = ['東', '南', '西', '北'] as const;
 
 export function CenterInfo({ snap, seatAt }: Props) {
-  const { round, dealerSeat, wallRemaining, event } = snap;
+  const { round, dealerSeat, wallRemaining } = snap;
   const windLabel = round.wind === 'E' ? '東' : '南';
-  const isDice = event.kind === 'dice';
-  const diceText = event.kind === 'dice' ? `${event.dice[0]}+${event.dice[1]}` : null;
+  const diceSum = snap.dice[0] + snap.dice[1];
+  const diceText = diceSum > 0 ? `${snap.dice[0]}+${snap.dice[1]}=${diceSum}` : null;
 
   // 各プレイヤーから読みやすい向きに点数を回転
   const rot: Record<number, number> = {
@@ -75,9 +75,8 @@ export function CenterInfo({ snap, seatAt }: Props) {
         <div style={{ fontWeight: 'bold', fontSize: 13 }}>{windLabel}{round.kyoku}局</div>
         <div style={{ color: '#ccc' }}>{round.honba}本場</div>
         <div style={{ color: '#9ab' }}>供託 {round.riichiSticks}</div>
-        {isDice && diceText
-          ? <div style={{ color: '#fc6' }}>🎲 {diceText}</div>
-          : <div style={{ color: '#9ab' }}>残 {wallRemaining}</div>}
+        {diceText && <div style={{ color: '#fc6' }}>🎲 {diceText}</div>}
+        <div style={{ color: '#9ab' }}>残 {wallRemaining}</div>
       </div>
       {scoreBlock(seatAt.right)}
 

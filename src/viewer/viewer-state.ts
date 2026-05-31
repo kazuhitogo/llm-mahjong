@@ -37,6 +37,88 @@ export interface ViewerSnapshot {
   players: [ViewerPlayer, ViewerPlayer, ViewerPlayer, ViewerPlayer];
   wallRemaining: number;
   scores: [number, number, number, number];
+  dice: [number, number]; // その局のサイコロ出目（中央に常時表示）
+  wall: ViewerWall;
+}
+
+// 物理的な山描画用ジオメトリ。実麻雀の開門・王牌・ツモ順を再現する。
+export interface ViewerWall {
+  breakSeat: number;         // 開門した壁の席（絶対）
+  dieSum: number;            // サイコロ合計（= 右端から数える開門スタック位置）
+  drawnCount: number;        // 配牌52＋ツモ。ツモ順 o がこの値未満なら消費済み
+  doraIndicators: Tile[];    // めくれたドラ表示牌（表向き描画用、初期1＋カンごと）
+}
+
+export type WallCellState = 'present' | 'consumed' | 'dead';
+export interface WallCell {
+  state: WallCellState;
+  dora?: Tile; // 表向きで見せるドラ表示牌（王牌内の該当位置のみ）
+}
+export interface WallStack {
+  upper: WallCell; // 上段（奥＝中央寄り）
+  lower: WallCell; // 下段
+  breakBefore: boolean; // このスタック直前が割れ目（開門）
+}
+
+/**
+ * 1 つの壁（17 スタック）を描画セル列へ変換。配列は画面左→右（プレイヤーの左→右）順。
+ *
+ * 実麻雀のツモ順 o（0 = 配牌開始牌, +1 ごとに反時計回り）を各物理位置へ割り当てる:
+ *  - 開門壁では右端(stack1)から数えて (dieSum+1) スタック目が配牌開始(o=0)。
+ *    そこから左へ o が増える。壁左端まで行ったら隣壁へ。
+ *  - 一周して開門壁の右端側へ戻り、最後に王牌(o=122..135)。
+ *    → 王牌は「右から (dieSum-6)..dieSum スタック目」に位置し、右側に live が dieSum-7 スタック残る。
+ *  - 非開門壁は右端(o小)→左端(o大)。壁順は breakSeat → breakSeat-1 → -2 → -3。
+ */
+export function wallStacksForSeat(wall: ViewerWall, seat: number): WallStack[] {
+  const T = wall.dieSum;
+  // サイコロを振る前（dieSum=0）は開門・王牌が未確定 → 全段そのまま積んだ中立表示。
+  if (T === 0) {
+    const cell: WallCell = { state: 'present' };
+    return Array.from({ length: 17 }, () => ({ upper: cell, lower: cell, breakBefore: false }));
+  }
+  const kanCount = Math.max(0, wall.doraIndicators.length - 1);
+  const liveLimit = 122 - kanCount;
+
+  const classify = (o: number): WallCell => {
+    if (o >= 122) {
+      const deadIdx = o - 122;
+      if (deadIdx <= 3 && deadIdx >= 4 - kanCount) return { state: 'consumed' }; // 嶺上牌で消費済み
+      if (deadIdx >= 4 && deadIdx % 2 === 0) {
+        const di = (deadIdx - 4) / 2;
+        if (di < wall.doraIndicators.length) return { state: 'dead', dora: wall.doraIndicators[di] };
+      }
+      return { state: 'dead' };
+    }
+    if (o >= liveLimit) return { state: 'dead' }; // カンで王牌へ繰り上がった末尾牌（王牌を14枚に保つ）
+    if (o < wall.drawnCount) return { state: 'consumed' };
+    return { state: 'present' };
+  };
+
+  // (sFromRight 0..16, row 0=下/1=上) → ツモ順 o
+  const oFor = (sFromRight: number, row: number): number => {
+    let o: number;
+    if (seat === wall.breakSeat) {
+      o = sFromRight >= T
+        ? 2 * (sFromRight - T) + row          // 配牌開始〜左端（最初に引く）
+        : (136 - 2 * T) + 2 * sFromRight + row; // 右端〜王牌（一周して最後）
+    } else {
+      const wallIndex = (wall.breakSeat - seat - 1 + 4) % 4; // 0,1,2
+      o = (34 - 2 * T) + 34 * wallIndex + 2 * sFromRight + row;
+    }
+    return ((o % 136) + 136) % 136;
+  };
+
+  const stacks: WallStack[] = [];
+  for (let j = 0; j < 17; j++) {
+    const sFromRight = 16 - j; // 画面左(j=0)=プレイヤー左端(sFromRight16)
+    stacks.push({
+      lower: classify(oFor(sFromRight, 0)),
+      upper: classify(oFor(sFromRight, 1)),
+      breakBefore: seat === wall.breakSeat && sFromRight === T - 1,
+    });
+  }
+  return stacks;
 }
 
 function emptyPlayer(): ViewerPlayer {
@@ -97,6 +179,8 @@ function describeEvent(ev: GameEvent): string {
       return `${seatLabel(ev.seat)} ツモ ${ev.tile}`;
     case 'rinshan':
       return `${seatLabel(ev.seat)} 嶺上ツモ ${ev.tile}`;
+    case 'dora':
+      return `ドラ表示牌: ${ev.tile}`;
     case 'riichi':
       return `${seatLabel(ev.seat)} リーチ宣言 (${ev.tile}切り)`;
     case 'action': {
@@ -142,9 +226,16 @@ export function buildSnapshots(
   let players: [ViewerPlayer, ViewerPlayer, ViewerPlayer, ViewerPlayer] = [
     emptyPlayer(), emptyPlayer(), emptyPlayer(), emptyPlayer(),
   ];
-  let wallRemaining = 136;
+  let breakSeat = 0;
+  let dieSum = 0;
+  let dice: [number, number] = [0, 0];
+  let drawnCount = 0;
+  let doraIndicators: Tile[] = [];
   let lastDiscardTile: Tile | null = null;
   let lastDiscardSeat: number | null = null;
+  // 残りツモ可能枚数。カン1回ごとライブ山末尾が王牌へ繰り上がる（海底が早まる）。
+  // 初期ドラ event 前は doraIndicators 空 → 槓数 0 とみなす。
+  const wallRemaining = () => Math.max(0, 122 - Math.max(0, doraIndicators.length - 1) - drawnCount);
   const pendingRiichi = new Set<number>();
   const scores: [number, number, number, number] = [...startScores] as [number, number, number, number];
 
@@ -155,7 +246,18 @@ export function buildSnapshots(
       case 'init':
         round = { wind: ev.round.wind, kyoku: ev.round.kyoku, honba: ev.round.honba, riichiSticks: ev.round.riichiSticks };
         dealerSeat = ev.dealerSeat;
-        wallRemaining = 136;
+        drawnCount = 0;
+        doraIndicators = [];
+        break;
+
+      case 'dice':
+        breakSeat = ev.breakSeat;
+        dice = [ev.dice[0], ev.dice[1]];
+        dieSum = ev.dice[0] + ev.dice[1];
+        break;
+
+      case 'dora':
+        doraIndicators = [...doraIndicators, ev.tile];
         break;
 
       case 'deal':
@@ -165,14 +267,13 @@ export function buildSnapshots(
           { hand: [...ev.hands[2]], discards: [], melds: [], riichi: false },
           { hand: [...ev.hands[3]], discards: [], melds: [], riichi: false },
         ];
-        // 136 - 52 dealt - 14 dead wall = 70
-        wallRemaining = 70;
+        drawnCount = 52;
         break;
 
       case 'draw': {
         const p = players[ev.seat]!;
         players[ev.seat] = { ...p, hand: [...p.hand, ev.tile] };
-        wallRemaining--;
+        drawnCount++;
         break;
       }
 
@@ -308,8 +409,10 @@ export function buildSnapshots(
         discards: [...p.discards],
         melds: p.melds.map(m => ({ ...m, tiles: [...m.tiles] })),
       })) as [ViewerPlayer, ViewerPlayer, ViewerPlayer, ViewerPlayer],
-      wallRemaining,
+      wallRemaining: wallRemaining(),
       scores: [...scores] as [number, number, number, number],
+      dice: [dice[0], dice[1]],
+      wall: { breakSeat, dieSum, drawnCount, doraIndicators: [...doraIndicators] },
     });
   }
 

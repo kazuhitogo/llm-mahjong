@@ -8,20 +8,16 @@ import { tileIdToTile } from '../tiles/tile.js';
  * 山と配牌の構造（実麻雀準拠）。
  *
  * **積み（layout）**: 136 牌をシャッフルして物理的な配置に固定する。
- *  layout[0..33]   = 親（東）の壁、index 0 = 親席の右端のスタック下牌、index 33 = 左端の上牌
- *  layout[34..67]  = 下家（南）の壁
- *  layout[68..101] = 対面（西）の壁
- *  layout[102..135] = 上家（北）の壁
- *  各壁は 17 スタック × 2 段 = 34 牌。
+ *  layout[0..33]=親, [34..67]=下家, [68..101]=対面, [102..135]=上家 の壁（各 17 スタック×2 段）。
+ *  layout の絶対位置と物理的な開門/王牌/ツモ順の対応づけ（実麻雀のサイコロ起点・反時計回り）は
+ *  描画側（viewer の wallStacksForSeat）が breakSeat と出目から再構成する。
+ *  エンジン内部ではツモを breakIndex からの線形列として扱う（山はシャッフル済みで配置は決定性のみ）。
  *
  * **サイコロ**: 親が 2 個振り、合計 N (2〜12) を得る。
- *  - 開門する壁 = (dealerSeat + (N - 1) % 4) % 4
- *    （親=1, 下家=2, 対面=3, 上家=4, 親=5, ... と数える）
- *  - 開門位置 = 当該壁の右端から N スタック目（= 2N 牌目）
- *  - layout 上の絶対インデックス: breakIndex = breakSeat * 34 + 2N（mod 136）
+ *  - 開門する壁 = breakSeat = (dealerSeat + (N - 1) % 4) % 4（親=1, 下家=2, 対面=3, 上家=4, ...）
+ *  - breakIndex = breakSeat * 34 + 2N（mod 136）
  *
- * **ツモ順**: 開門位置から反時計回り（layout 上で +1 方向）に進む。
- *  N 番目のツモ牌 = layout[(breakIndex + N) % 136]
+ * **ツモ順**: breakIndex から +1 方向に線形に進む。N 番目のツモ牌 = layout[(breakIndex + N) % 136]
  *
  * **王牌**: 開門位置の手前 14 牌（drawnCount が 122 を超える前で打ち切られる領域）。
  *   deadWall[i] = layout[(breakIndex + 122 + i) % 136]
@@ -97,15 +93,24 @@ export function dealWall(seed: number, dealerSeat: Seat = 0): DealtWall {
   };
 }
 
+/**
+ * ライブ山のツモ可能上限（drawnCount がこの値に達すると荒牌）。
+ * カンが入るたびライブ山末尾の 1 枚が王牌へ繰り上がる（王牌を 14 枚に保つ）ため、
+ * 海底が槓数ぶん早まる。槓数 = doraIndicatorCount - 1（初期ドラを除く）。
+ */
+function liveWallLimit(wall: WallState): number {
+  return 122 - (wall.doraIndicatorCount - 1);
+}
+
 /** 次にツモする牌の TileId（破壊しない）。 */
 export function peekNextDraw(wall: WallState): TileId | null {
-  if (wall.drawnCount >= 122) return null;
+  if (wall.drawnCount >= liveWallLimit(wall)) return null;
   return wall.layout[(wall.breakIndex + wall.drawnCount) % 136]!;
 }
 
 /** 1 枚ツモして新しい WallState を返す。山切れなら null。 */
 export function drawTile(wall: WallState): { tile: TileId; wall: WallState } | null {
-  if (wall.drawnCount >= 122) return null;
+  if (wall.drawnCount >= liveWallLimit(wall)) return null;
   const t = wall.layout[(wall.breakIndex + wall.drawnCount) % 136]!;
   return {
     tile: t,
@@ -115,7 +120,7 @@ export function drawTile(wall: WallState): { tile: TileId; wall: WallState } | n
 
 /** 残りのツモ可能枚数。0 で荒牌流局。 */
 export function remainingDraws(wall: WallState): number {
-  return Math.max(0, 122 - wall.drawnCount);
+  return Math.max(0, liveWallLimit(wall) - wall.drawnCount);
 }
 
 /** 王牌の i 番目の TileId（0..13） */

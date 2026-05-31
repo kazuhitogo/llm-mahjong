@@ -83,14 +83,17 @@ export function BackTile({ spent }: { spent?: boolean } = {}) {
 }
 
 // 寝かせた牌（倒した牌）を上から見た面。山で使用。手牌と同じ面サイズ。
-export function FlatTile({ spent }: { spent?: boolean } = {}) {
+// dead=王牌（取られない牌）は淡い琥珀で区別する。
+export function FlatTile({ spent, dead }: { spent?: boolean; dead?: boolean } = {}) {
   const style: CSSProperties = {
     width: TILE_W,
     height: TILE_L,
     background: spent
       ? 'rgba(255,255,255,0.04)'
-      : 'linear-gradient(155deg, #45456080 0%, #2a2a3e 45%, #1a1a28 100%)',
-    border: `1px solid ${spent ? 'rgba(255,255,255,0.06)' : '#14141d'}`,
+      : dead
+        ? 'linear-gradient(155deg, #5a4a2e 0%, #3a2f1c 45%, #281f12 100%)'
+        : 'linear-gradient(155deg, #45456080 0%, #2a2a3e 45%, #1a1a28 100%)',
+    border: `1px solid ${spent ? 'rgba(255,255,255,0.06)' : dead ? '#6b5526' : '#14141d'}`,
     boxShadow: spent ? undefined : 'inset 0 2px 0 rgba(255,255,255,0.07)',
     borderRadius: 3,
     boxSizing: 'border-box',

@@ -12,6 +12,13 @@ describe('GameEngine — Phase 1', () => {
     expect(e.state.turn.seat).toBe(0);
   });
 
+  it('配牌時に初期ドラ表示牌イベントを 1 件出す', () => {
+    const e = new GameEngine({ rngSeed: 42 });
+    const doraEvents = e.events().filter((ev) => ev.kind === 'dora');
+    expect(doraEvents.length).toBe(1);
+    expect(doraEvents[0]!.kind === 'dora' && typeof doraEvents[0]!.tile).toBe('string');
+  });
+
   it('step() でツモすると親は 14 枚、phase は discard', () => {
     const e = new GameEngine({ rngSeed: 42 });
     e.step();

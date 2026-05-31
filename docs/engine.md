@@ -122,4 +122,7 @@ type GameLog = {
 `exportLog(hanchan)` → `serializeLog()` → JSON  
 `deserializeLog(json)` → `replayKyoku(events, calculator)`
 
+主な `GameEvent.kind`: `init` / `dice` / `deal` / `dora` / `draw` / `rinshan` / `action` / `riichi` / `meld` / `agari` / `ryukyoku` / `violation` / `think`。
+`dora` イベント（`{ kind:'dora'; tile }`）は配牌時の初期ドラと、カンごとのカンドラ公開時に発行。`replayKyoku` は無視（エンジンが内部で再導出するため）。
+
 実装: `src/log/log.ts`, `src/log/replay.ts`

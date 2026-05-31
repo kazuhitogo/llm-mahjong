@@ -56,8 +56,8 @@ interface WallState {
   layout: readonly TileId[];  // 136 牌の物理配置（シャッフル済み固定）
   dice: readonly [number, number];
   breakIndex: number;         // 開門位置
-  drawnCount: number;         // 配牌 52 + ツモ済み枚数（122 で荒牌流局）
-  doraIndicatorCount: number; // 公開済みドラ表示牌数（最大 5）
+  drawnCount: number;         // 配牌 52 + ツモ済み枚数（liveLimit で荒牌流局）
+  doraIndicatorCount: number; // 公開済みドラ表示牌数（初期1＋槓数、最大 5）
 }
 ```
 
@@ -66,6 +66,8 @@ interface WallState {
 - 王牌 14 牌: `deadWall[i] = layout[(breakIndex + 122 + i) % 136]`
   - `deadWall[0..3]` = 嶺上牌（3→2→1→0 の順に使用）
   - `deadWall[4]` = 初期ドラ表示、`deadWall[5]` = 裏ドラ表示 1、以降 +2 ずつ
-- `remainingDraws = max(0, 122 - drawnCount)`（viewer の `snap.wallRemaining`）
+- カン時の海底繰り上げ: カン1回ごとライブ山末尾の1枚が王牌へ繰り上がり（王牌を14枚に保つ）、荒牌が1枚早まる。
+  - 槓数 = `doraIndicatorCount - 1`、`liveLimit = 122 - 槓数`
+  - `remainingDraws = max(0, liveLimit - drawnCount)`（viewer の `snap.wallRemaining`）
 
 実装: `src/wall/wall.ts`, `src/wall/rng.ts`

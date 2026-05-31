@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import type { CSSProperties, ChangeEvent } from 'react';
 import { buildSnapshots, type GameLog, type ViewerSnapshot } from './viewer-state.js';
 import { TableLayout } from './components/TableLayout.js';
@@ -30,7 +30,6 @@ export default function App() {
   const [stepIdx, setStepIdx] = useState(0);
   const [povSeat, setPovSeat] = useState(0);
   const [showAll, setShowAll] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const kyokuStartScores = useMemo<[number, number, number, number][]>(
     () => (log ? computeKyokuStartScores(log) : []),
@@ -124,10 +123,15 @@ export default function App() {
       {/* Header */}
       <div style={headerStyle}>
         <strong style={{ fontSize: 14 }}>LLM Mahjong Viewer</strong>
-        <button style={{ ...btnStyle(), background: '#4a9' }} onClick={() => fileInputRef.current?.click()}>
+        <label style={{ ...btnStyle(), background: '#4a9', display: 'inline-block' }}>
           ログ読み込み
-        </button>
-        <input ref={fileInputRef} type="file" accept=".json" onChange={handleFile} style={{ display: 'none' }} />
+          <input
+            type="file"
+            accept=".json,application/json"
+            onChange={handleFile}
+            style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0 0 0 0)', border: 0 }}
+          />
+        </label>
         {log && (
           <>
             <span style={{ fontSize: 11, opacity: 0.7 }}>seed: {log.rngSeed}</span>
@@ -221,7 +225,7 @@ export default function App() {
               seatAt={seatAt}
               povSeat={povSeat}
               showAll={showAll}
-              remainingDraws={snap.wallRemaining}
+              wall={snap.wall}
               center={<CenterInfo snap={snap} seatAt={seatAt} />}
             />
           )}

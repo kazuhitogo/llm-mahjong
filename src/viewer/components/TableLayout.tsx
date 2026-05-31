@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
-import type { ViewerPlayer } from '../viewer-state.js';
+import type { ViewerPlayer, ViewerWall } from '../viewer-state.js';
+import { wallStacksForSeat } from '../viewer-state.js';
 import { DiscardPart, HandPart } from './SeatArea.js';
 import { WallStrip } from './WallStrip.js';
 
@@ -8,7 +9,7 @@ interface Props {
   seatAt: { bottom: number; right: number; top: number; left: number };
   povSeat: number;
   showAll: boolean;
-  remainingDraws: number;
+  wall: ViewerWall;
   center: ReactNode;
 }
 
@@ -21,7 +22,7 @@ const R_DISCARD = 90;  // 河の先頭（中央パネル直外）
 const R_WALL    = 198; // 山の先頭（河4行+padding）
 const R_HAND    = 280; // 手牌の先頭（山2行+padding）
 
-export function TableLayout({ players, seatAt, povSeat, showAll, remainingDraws, center }: Props) {
+export function TableLayout({ players, seatAt, povSeat, showAll, wall, center }: Props) {
   const containerStyle: CSSProperties = {
     position: 'relative',
     width: SIZE,
@@ -58,8 +59,6 @@ export function TableLayout({ players, seatAt, povSeat, showAll, remainingDraws,
     transform: 'translateX(-50%)',
   });
 
-  const wallPerSide = Math.min(34, Math.round(remainingDraws / 4));
-
   const seats = [
     { seat: seatAt.bottom, deg: 0 },
     { seat: seatAt.right,  deg: -90 },
@@ -76,7 +75,7 @@ export function TableLayout({ players, seatAt, povSeat, showAll, remainingDraws,
             <DiscardPart discards={players[s.seat]!.discards} />
           </div>
           <div style={child(R_WALL)}>
-            <WallStrip remaining={wallPerSide} />
+            <WallStrip stacks={wallStacksForSeat(wall, s.seat)} />
           </div>
           <div style={child(R_HAND)}>
             <HandPart player={players[s.seat]!} isPov={s.seat === povSeat} showAll={showAll} />

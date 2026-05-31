@@ -145,6 +145,20 @@ describe('drawTile / peekNextDraw', () => {
     expect(remainingDraws(wall)).toBe(0);
     expect(drawTile(wall)).toBeNull();
   });
+
+  it('カン（doraIndicatorCount 増）ごとに海底が 1 枚早まる', () => {
+    const { wall } = dealWall(42);
+    expect(remainingDraws(wall)).toBe(70);          // 槓数0
+    const k1 = { ...wall, doraIndicatorCount: 2 };  // 1槓
+    expect(remainingDraws(k1)).toBe(69);
+    const k3 = { ...wall, doraIndicatorCount: 4 };  // 3槓
+    expect(remainingDraws(k3)).toBe(67);
+    // ライブ山残 1 の状態で 1 槓入ると即海底
+    const near = { ...wall, drawnCount: 121 };       // 122-121=1
+    expect(remainingDraws(near)).toBe(1);
+    expect(remainingDraws({ ...near, doraIndicatorCount: 2 })).toBe(0);
+    expect(drawTile({ ...near, doraIndicatorCount: 2 })).toBeNull();
+  });
 });
 
 describe('王牌・ドラ', () => {

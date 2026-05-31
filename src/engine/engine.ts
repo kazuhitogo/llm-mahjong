@@ -111,6 +111,10 @@ export class GameEngine {
           kind: 'deal',
           hands: players.map((p) => [...p.hand]) as [Tile[], Tile[], Tile[], Tile[]],
         },
+        {
+          kind: 'dora',
+          tile: tileIdToTile(deadWallTileId(dealt.wall, 4), rules.redDora),
+        },
       ],
       rngSeed: opts.rngSeed,
     };
@@ -626,6 +630,10 @@ export class GameEngine {
       ...this.state.wall,
       doraIndicatorCount: this.state.wall.doraIndicatorCount + 1,
     };
+    this.state.history.push({
+      kind: 'dora',
+      tile: tileIdToTile(deadWallTileId(this.state.wall, 4 + (this.state.wall.doraIndicatorCount - 1) * 2), this.state.config.redDora),
+    });
 
     this.lastDrawnId = rinshanId;
 
