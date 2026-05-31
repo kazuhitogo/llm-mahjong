@@ -99,9 +99,16 @@ export function wallStacksForSeat(wall: ViewerWall, seat: number): WallStack[] {
   const oFor = (sFromRight: number, row: number): number => {
     let o: number;
     if (seat === wall.breakSeat) {
-      o = sFromRight >= T
-        ? 2 * (sFromRight - T) + row          // 配牌開始〜左端（最初に引く）
-        : (136 - 2 * T) + 2 * sFromRight + row; // 右端〜王牌（一周して最後）
+      if (sFromRight >= T) {
+        o = 2 * (sFromRight - T) + row;            // 配牌開始〜左端（最初に引く）
+      } else if (T >= 7 && sFromRight >= T - 7) {
+        // 王牌7スタック全て自席に収まる場合（T≥7）。
+        // 物理配置: 開門ギャップ直右=嶺上(deadIdx 0..3)、左から3番目=ドラ表示(deadIdx 4)。
+        // 偶数 deadIdx=上段、奇数=下段（現行 classify の dora/consumed 判定と整合）。
+        o = 123 + 2 * (T - 1 - sFromRight) - row;
+      } else {
+        o = (136 - 2 * T) + 2 * sFromRight + row;  // T<7 時の端牌 or 生牌後半
+      }
     } else {
       const wallIndex = (wall.breakSeat - seat - 1 + 4) % 4; // 0,1,2
       o = (34 - 2 * T) + 34 * wallIndex + 2 * sFromRight + row;
