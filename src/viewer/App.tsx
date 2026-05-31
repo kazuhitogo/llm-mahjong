@@ -31,6 +31,26 @@ function kyokuLabel(ev: GameLog['kyoku'][number]): string {
   return `${w}${init.round.kyoku}局`;
 }
 
+type TokenUsage = { in: number; out: number; calls: number };
+
+function computeTokenUsage(log: GameLog): [TokenUsage, TokenUsage, TokenUsage, TokenUsage] {
+  const usage: [TokenUsage, TokenUsage, TokenUsage, TokenUsage] = [
+    { in: 0, out: 0, calls: 0 }, { in: 0, out: 0, calls: 0 },
+    { in: 0, out: 0, calls: 0 }, { in: 0, out: 0, calls: 0 },
+  ];
+  for (const kyoku of log.kyoku) {
+    for (const ev of kyoku.events) {
+      if (ev.kind !== 'think') continue;
+      const u = usage[ev.seat];
+      if (!u) continue;
+      u.in += ev.inputTokens ?? 0;
+      u.out += ev.outputTokens ?? 0;
+      u.calls += 1;
+    }
+  }
+  return usage;
+}
+
 function computeKyokuStartScores(log: GameLog): [number, number, number, number][] {
   const result: [number, number, number, number][] = [];
   let scores: [number, number, number, number] = [25000, 25000, 25000, 25000];
@@ -55,6 +75,8 @@ export default function App() {
     () => (log ? computeKyokuStartScores(log) : []),
     [log],
   );
+
+  const tokenUsage = useMemo(() => (log ? computeTokenUsage(log) : null), [log]);
 
   const snapshots = useMemo<ViewerSnapshot[]>(() => {
     if (!log) return [];
@@ -213,6 +235,27 @@ export default function App() {
               全開示
             </label>
           </div>
+
+          {/* トークン使用量（全局通算） */}
+          {tokenUsage && (
+            <div style={panelStyle}>
+              <strong style={{ fontSize: 12 }}>トークン使用量（全局通算）</strong>
+              <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                {tokenUsage.map((u, i) => (
+                  <div key={i} style={{ fontSize: 10, color: '#444', lineHeight: 1.5 }}>
+                    <span style={{ fontWeight: 'bold' }}>{seatLabel(i)}</span>
+                    <span style={{ marginLeft: 4, color: '#06c' }}>IN {u.in.toLocaleString()}</span>
+                    <span style={{ marginLeft: 4, color: '#c60' }}>OUT {u.out.toLocaleString()}</span>
+                    <span style={{ marginLeft: 4, color: '#999' }}>({u.calls}回)</span>
+                  </div>
+                ))}
+                <div style={{ fontSize: 10, color: '#666', borderTop: '1px solid #eee', marginTop: 3, paddingTop: 3 }}>
+                  合計 IN {tokenUsage.reduce((s, u) => s + u.in, 0).toLocaleString()}
+                  {' / '}OUT {tokenUsage.reduce((s, u) => s + u.out, 0).toLocaleString()}
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
