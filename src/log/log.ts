@@ -10,19 +10,22 @@ export interface KyokuLog {
 export interface GameLog {
   version: 1;
   rngSeed: number;
+  models?: [string, string, string, string];
   kyoku: KyokuLog[];
   standings: FinalStanding[];
 }
 
-export function exportLog(hanchan: HanchanEngine): GameLog {
+export function exportLog(hanchan: HanchanEngine, models?: [string, string, string, string]): GameLog {
   if (!hanchan.isGameOver()) throw new Error('game not over');
   const logs = hanchan.kyokuLogs;
-  return {
+  const log: GameLog = {
     version: 1,
     rngSeed: hanchan.rngSeed,
     kyoku: logs.map((events, i) => ({ kyokuIndex: i, events })),
     standings: hanchan.standings(),
   };
+  if (models) log.models = models;
+  return log;
 }
 
 export function serializeLog(log: GameLog): string {

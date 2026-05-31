@@ -131,6 +131,15 @@ export default function App() {
           </label>
         </div>
         {log && <div style={{ fontSize: 11, opacity: 0.6, marginTop: 6 }}>seed: {log.rngSeed}</div>}
+        {log?.models && (
+          <div style={{ marginTop: 6 }}>
+            {log.models.map((m, i) => (
+              <div key={i} style={{ fontSize: 10, color: '#555', lineHeight: 1.6 }}>
+                seat{i}: {m}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {log && (
@@ -202,7 +211,7 @@ export default function App() {
       </div>
       {snap.prompt && (
         <div style={panelStyle}>
-          <details>
+          <details open>
             <summary style={{ fontSize: 11, color: '#888', cursor: 'pointer', userSelect: 'none' }}>
               入力プロンプト表示
             </summary>

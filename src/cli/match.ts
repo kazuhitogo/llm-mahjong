@@ -86,8 +86,8 @@ async function playKyoku(
       const acts = engine.legalActions(seat);
       if (acts.length === 0) { engine.step(); continue; }
 
-      const { action: chosen, reasoning, prompt } = await players[seat]!.decide(obs, acts);
-      engine.applyAction(seat, chosen, reasoning, prompt);
+      const { action: chosen, reasoning, prompt, inputTokens, outputTokens } = await players[seat]!.decide(obs, acts);
+      engine.applyAction(seat, chosen, reasoning, prompt, players[seat]!.name, inputTokens, outputTokens);
       continue;
     }
 
@@ -98,8 +98,8 @@ async function playKyoku(
         const acts = engine.legalActions(pc.seat);
         if (acts.length === 0) { engine.applyAction(pc.seat, { kind: 'pass' }); continue; }
 
-        const { action: chosen, reasoning, prompt } = await players[pc.seat]!.decide(obs, acts);
-        engine.applyAction(pc.seat, chosen, reasoning, prompt);
+        const { action: chosen, reasoning, prompt, inputTokens, outputTokens } = await players[pc.seat]!.decide(obs, acts);
+        engine.applyAction(pc.seat, chosen, reasoning, prompt, players[pc.seat]!.name, inputTokens, outputTokens);
       }
       continue;
     }
@@ -183,7 +183,7 @@ async function main(): Promise<void> {
   const ts = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
   const logFile = opts.logFile ?? join(projectRoot, 'logs', `${ts}.json`);
   mkdirSync(dirname(logFile), { recursive: true });
-  const log = exportLog(hanchan);
+  const log = exportLog(hanchan, opts.models);
   writeFileSync(logFile, serializeLog(log), 'utf8');
   console.log(`\nログ保存: ${logFile}`);
 }

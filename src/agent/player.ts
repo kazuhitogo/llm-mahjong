@@ -6,6 +6,8 @@ export interface DecideResult {
   action: Action;
   reasoning?: string;
   prompt?: string;
+  inputTokens?: number;
+  outputTokens?: number;
 }
 
 export interface Player {

@@ -17,6 +17,8 @@ interface OllamaChatResponse {
     }>;
   };
   done: boolean;
+  prompt_eval_count?: number;
+  eval_count?: number;
 }
 
 const SELECT_ACTION_TOOL = {
@@ -147,6 +149,8 @@ export class OllamaAgent implements Player {
     if (num >= 1 && num <= actions.length) {
       const result: DecideResult = { action: actions[num - 1]! };
       if (reasoning) result.reasoning = reasoning;
+      if (data.prompt_eval_count != null) result.inputTokens = data.prompt_eval_count;
+      if (data.eval_count != null) result.outputTokens = data.eval_count;
       return result;
     }
     return null;
@@ -165,8 +169,10 @@ export class OllamaAgent implements Player {
     if (!data) return this._fallback(actions);
 
     const text = data.message?.content ?? '';
-
-    return this._parseCot(text, actions);
+    const result = this._parseCot(text, actions);
+    if (data.prompt_eval_count != null) result.inputTokens = data.prompt_eval_count;
+    if (data.eval_count != null) result.outputTokens = data.eval_count;
+    return result;
   }
 
   private _parseCot(text: string, actions: Action[]): DecideResult {
