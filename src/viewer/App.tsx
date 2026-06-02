@@ -96,7 +96,7 @@ export default function App() {
   const [kyokuIdx, setKyokuIdx] = useState(0);
   const [stepIdx, setStepIdx] = useState(0);
   const [povSeat, setPovSeat] = useState(0);
-  const [showAll, setShowAll] = useState(false);
+  const [showAll, setShowAll] = useState(true);
 
   // Live mode state
   const [livePort, setLivePort] = useState('7777');
