@@ -113,7 +113,8 @@ export class OllamaAgent implements Player {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (this._apiKey) headers['Authorization'] = `Bearer ${this._apiKey}`;
 
-        const res = await fetch(`${this.baseUrl}/api/chat`, {
+        const url = `${this.baseUrl}/api/chat`;
+        const res = await fetch(url, {
           method: 'POST',
           headers,
           body: JSON.stringify(body),
@@ -125,7 +126,7 @@ export class OllamaAgent implements Player {
             this._toolUseSupported = false;
             return null;
           }
-          throw new Error(`Ollama HTTP ${res.status}`);
+          throw new Error(`Ollama HTTP ${res.status} (${url})`);
         }
         const data = await res.json() as OllamaChatResponse;
         const inTok = data.prompt_eval_count ?? data.usage?.prompt_tokens;
