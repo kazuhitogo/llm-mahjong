@@ -1,7 +1,9 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import type { CSSProperties, ChangeEvent } from 'react';
 import { buildSnapshots, emptySnapshot, type GameLog, type ViewerSnapshot } from './viewer-state.js';
-import type { Action } from '../types/action.js';
+import type { GameEvent } from '../types/state.js';
+import type { KyokuLog } from '../log/log.js';
+import type { FinalStanding } from '../score/standings.js';
 import { TableLayout } from './components/TableLayout.js';
 import { CenterInfo } from './components/CenterInfo.js';
 
@@ -13,21 +15,6 @@ const ZERO_TOKEN_USAGE: [TokenUsage, TokenUsage, TokenUsage, TokenUsage] = [
 ];
 function seatLabel(s: number): string { return `seat${s}(${WIND_JP[s] ?? s}家)`; }
 
-function describeAction(seat: number, a: Action): string {
-  switch (a.kind) {
-    case 'discard': return `${seatLabel(seat)} 打牌 ${a.tile}${a.tsumogiri ? ' (ツモ切り)' : ''}`;
-    case 'riichi': return `${seatLabel(seat)} リーチ宣言 (${a.tile}切り)`;
-    case 'tsumo': return `${seatLabel(seat)} ツモ和了!`;
-    case 'ron': return `${seatLabel(seat)} ロン和了!`;
-    case 'pon': return `${seatLabel(seat)} ポン [${a.tiles.join(' ')}]`;
-    case 'chi': return `${seatLabel(seat)} チー [${a.tiles.join(' ')}]`;
-    case 'daiminkan': return `${seatLabel(seat)} 大明槓`;
-    case 'ankan': return `${seatLabel(seat)} 暗槓 ${a.tile}`;
-    case 'kakan': return `${seatLabel(seat)} 加槓 ${a.tile}`;
-    case 'kyushu_kyuhai': return `${seatLabel(seat)} 九種九牌`;
-    case 'pass': return `${seatLabel(seat)} パス`;
-  }
-}
 
 function kyokuLabel(ev: GameLog['kyoku'][number]): string {
   const init = ev.events.find(e => e.kind === 'init');
@@ -92,6 +79,17 @@ function computeKyokuStartScores(log: GameLog): [number, number, number, number]
   return result;
 }
 
+type LiveStatus = 'idle' | 'connecting' | 'live' | 'done' | 'error';
+
+interface LiveMsg {
+  type: string;
+  seed?: number;
+  models?: [string, string, string, string];
+  kyokuIndex?: number;
+  events?: GameEvent[];
+  standings?: FinalStanding[];
+}
+
 export default function App() {
   const [log, setLog] = useState<GameLog | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -100,24 +98,34 @@ export default function App() {
   const [povSeat, setPovSeat] = useState(0);
   const [showAll, setShowAll] = useState(false);
 
+  // Live mode state
+  const [livePort, setLivePort] = useState('7777');
+  const [liveStatus, setLiveStatus] = useState<LiveStatus>('idle');
+  const [liveLog, setLiveLog] = useState<GameLog | null>(null);
+  const [liveFollow, setLiveFollow] = useState(true);
+  const esRef = useRef<EventSource | null>(null);
+  const atEndRef = useRef(true);
+
+  const effectiveLog = liveLog ?? log;
+
   const kyokuStartScores = useMemo<[number, number, number, number][]>(
-    () => (log ? computeKyokuStartScores(log) : []),
-    [log],
+    () => (effectiveLog ? computeKyokuStartScores(effectiveLog) : []),
+    [effectiveLog],
   );
 
   const tokenUsage = useMemo(
-    () => log ? computeTokenUsage(log) : ZERO_TOKEN_USAGE,
-    [log],
+    () => effectiveLog ? computeTokenUsage(effectiveLog) : ZERO_TOKEN_USAGE,
+    [effectiveLog],
   );
-  const timeUsage = useMemo(() => (log ? computeTimeUsage(log) : null), [log]);
+  const timeUsage = useMemo(() => (effectiveLog ? computeTimeUsage(effectiveLog) : null), [effectiveLog]);
 
   const snapshots = useMemo<ViewerSnapshot[]>(() => {
-    if (!log) return [];
-    const kyoku = log.kyoku[kyokuIdx];
+    if (!effectiveLog) return [];
+    const kyoku = effectiveLog.kyoku[kyokuIdx];
     if (!kyoku) return [];
     const start = kyokuStartScores[kyokuIdx] ?? [25000, 25000, 25000, 25000];
     return buildSnapshots(kyoku.events, start);
-  }, [log, kyokuIdx, kyokuStartScores]);
+  }, [effectiveLog, kyokuIdx, kyokuStartScores]);
 
   const total = snapshots.length;
   const snap = snapshots[stepIdx] ?? null;
@@ -127,14 +135,37 @@ export default function App() {
     setStepIdx(Math.max(0, Math.min(n, total - 1)));
   }, [total]);
 
+  // Track whether user is at the end
+  useEffect(() => {
+    atEndRef.current = total === 0 || stepIdx >= total - 1;
+  }, [stepIdx, total]);
+
+  // Live auto-follow: when new events arrive (total increases), stay at end if following
+  useEffect(() => {
+    if (liveStatus === 'live' && liveFollow && total > 0) {
+      setStepIdx(total - 1);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [total, liveStatus]);
+
+  // Auto-switch kyoku when new kyoku starts in live mode
+  const liveKyokuLen = liveLog?.kyoku.length;
+  useEffect(() => {
+    if (liveStatus === 'live' && liveLog && liveLog.kyoku.length > 0) {
+      setKyokuIdx(liveLog.kyoku.length - 1);
+      setLiveFollow(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveKyokuLen, liveStatus]);
+
   useEffect(() => { setStepIdx(0); }, [kyokuIdx]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') clampStep(stepIdx + 1);
-      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') clampStep(stepIdx - 1);
-      else if (e.key === 'Home') setStepIdx(0);
-      else if (e.key === 'End') setStepIdx(total - 1);
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { setLiveFollow(false); clampStep(stepIdx + 1); }
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { setLiveFollow(false); clampStep(stepIdx - 1); }
+      else if (e.key === 'Home') { setLiveFollow(false); setStepIdx(0); }
+      else if (e.key === 'End') { setLiveFollow(true); setStepIdx(total - 1); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -147,7 +178,9 @@ export default function App() {
     reader.onload = ev => {
       try {
         const parsed = JSON.parse(ev.target?.result as string) as GameLog;
+        disconnectLive();
         setLog(parsed);
+        setLiveLog(null);
         setFileName(file.name);
         setKyokuIdx(0);
         setStepIdx(0);
@@ -156,6 +189,68 @@ export default function App() {
       }
     };
     reader.readAsText(file);
+  }
+
+  function connectLive() {
+    if (esRef.current) {
+      esRef.current.close();
+      esRef.current = null;
+    }
+    setLiveStatus('connecting');
+    setLiveLog(null);
+    setLog(null);
+    setFileName(null);
+    setLiveFollow(true);
+
+    const url = `http://localhost:${livePort}/events`;
+    const es = new EventSource(url);
+    esRef.current = es;
+
+    es.onopen = () => setLiveStatus('connecting');
+
+    es.onmessage = (e: MessageEvent<string>) => {
+      const msg = JSON.parse(e.data) as LiveMsg;
+      if (msg.type === 'init') {
+        setLiveLog({
+          version: 1,
+          rngSeed: msg.seed ?? 0,
+          models: msg.models,
+          kyoku: [],
+          standings: [],
+        });
+        setLiveStatus('live');
+        setKyokuIdx(0);
+      } else if (msg.type === 'events' && msg.events && msg.kyokuIndex != null) {
+        const ki = msg.kyokuIndex;
+        const newEvs = msg.events;
+        setLiveLog(prev => {
+          if (!prev) return prev;
+          const kyoku: KyokuLog[] = [...prev.kyoku];
+          if (!kyoku[ki]) {
+            kyoku[ki] = { kyokuIndex: ki, events: [] };
+          }
+          kyoku[ki] = { kyokuIndex: ki, events: [...kyoku[ki]!.events, ...newEvs] };
+          return { ...prev, kyoku };
+        });
+      } else if (msg.type === 'end') {
+        setLiveLog(prev => prev ? { ...prev, standings: msg.standings ?? [] } : prev);
+        setLiveStatus('done');
+      }
+    };
+
+    es.onerror = () => {
+      if (liveStatus !== 'live' && liveStatus !== 'done') {
+        setLiveStatus('error');
+      }
+      es.close();
+      esRef.current = null;
+    };
+  }
+
+  function disconnectLive() {
+    esRef.current?.close();
+    esRef.current = null;
+    setLiveStatus('idle');
   }
 
   const panelStyle: CSSProperties = {
@@ -192,11 +287,26 @@ export default function App() {
     left: (povSeat + 3) % 4,
   };
 
+  const liveStatusColor: Record<LiveStatus, string> = {
+    idle: '#888',
+    connecting: '#fa0',
+    live: '#0c0',
+    done: '#46a',
+    error: '#c00',
+  };
+  const liveStatusLabel: Record<LiveStatus, string> = {
+    idle: '',
+    connecting: '接続中…',
+    live: '● LIVE',
+    done: '終了',
+    error: '接続失敗',
+  };
+
   const leftColumn = (
     <div style={{ width: 240, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={panelStyle}>
         <strong style={{ fontSize: 14, color: '#1a472a' }}>LLM Mahjong Viewer</strong>
-        <div style={{ marginTop: 8 }}>
+        <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
           <label style={{ ...btnStyle(), background: '#4a9', color: '#fff', display: 'inline-block' }}>
             ログ読み込み
             <input
@@ -208,22 +318,60 @@ export default function App() {
           </label>
         </div>
         {fileName && <div style={{ fontSize: 11, color: '#4a9', marginTop: 6, wordBreak: 'break-all' }}>{fileName}</div>}
-        {log && <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2 }}>seed: {log.rngSeed}</div>}
-        {log?.models && (
+        {effectiveLog && <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2 }}>seed: {effectiveLog.rngSeed}</div>}
+        {effectiveLog?.models && (
           <div style={{ marginTop: 6 }}>
-            {log.models.map((m, i) => (
+            {effectiveLog.models.map((m, i) => (
               <div key={i} style={{ fontSize: 10, color: '#555', lineHeight: 1.6 }}>
                 seat{i}: {m}
               </div>
             ))}
           </div>
         )}
+
+        {/* ライブ接続 */}
+        <div style={{ marginTop: 10, borderTop: '1px solid #eee', paddingTop: 8 }}>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <input
+              type="text"
+              value={livePort}
+              onChange={e => setLivePort(e.target.value)}
+              placeholder="7777"
+              style={{ width: 52, fontSize: 11, padding: '2px 4px', border: '1px solid #ccc', borderRadius: 3 }}
+            />
+            {liveStatus === 'idle' || liveStatus === 'error' || liveStatus === 'done' ? (
+              <button style={{ ...btnStyle(), background: '#146', color: '#fff' }} onClick={connectLive}>
+                ライブ接続
+              </button>
+            ) : (
+              <button style={{ ...btnStyle(), background: '#a33', color: '#fff' }} onClick={disconnectLive}>
+                切断
+              </button>
+            )}
+            {liveStatus !== 'idle' && (
+              <span style={{ fontSize: 11, fontWeight: 'bold', color: liveStatusColor[liveStatus] }}>
+                {liveStatusLabel[liveStatus]}
+              </span>
+            )}
+          </div>
+          {liveStatus === 'live' && (
+            <label style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, color: '#555' }}>
+              <input type="checkbox" checked={liveFollow} onChange={e => setLiveFollow(e.target.checked)} />
+              最新イベントへ追従
+            </label>
+          )}
+          {liveStatus === 'error' && (
+            <div style={{ fontSize: 10, color: '#c00', marginTop: 3 }}>
+              port {livePort} に接続できません。<br />--live で match を起動してください。
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 局タブ */}
       <div style={{ ...panelStyle, display: 'flex', gap: 4, flexWrap: 'wrap', minHeight: 34 }}>
-        {log?.kyoku.map((k, i) => (
-          <button key={i} style={tabStyle(i === kyokuIdx)} onClick={() => setKyokuIdx(i)}>
+        {effectiveLog?.kyoku.map((k, i) => (
+          <button key={i} style={tabStyle(i === kyokuIdx)} onClick={() => { setKyokuIdx(i); setLiveFollow(false); }}>
             {kyokuLabel(k)}
           </button>
         ))}
@@ -232,15 +380,15 @@ export default function App() {
       {/* 再生コントローラー */}
       <div style={panelStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <button style={btnStyle(total === 0 || stepIdx === 0)} disabled={total === 0 || stepIdx === 0} onClick={() => setStepIdx(0)}>⏮</button>
-          <button style={btnStyle(total === 0 || stepIdx === 0)} disabled={total === 0 || stepIdx === 0} onClick={() => clampStep(stepIdx - 1)}>◀</button>
-          <button style={btnStyle(total === 0 || stepIdx >= total - 1)} disabled={total === 0 || stepIdx >= total - 1} onClick={() => clampStep(stepIdx + 1)}>▶</button>
-          <button style={btnStyle(total === 0 || stepIdx >= total - 1)} disabled={total === 0 || stepIdx >= total - 1} onClick={() => setStepIdx(total - 1)}>⏭</button>
+          <button style={btnStyle(total === 0 || stepIdx === 0)} disabled={total === 0 || stepIdx === 0} onClick={() => { setLiveFollow(false); setStepIdx(0); }}>⏮</button>
+          <button style={btnStyle(total === 0 || stepIdx === 0)} disabled={total === 0 || stepIdx === 0} onClick={() => { setLiveFollow(false); clampStep(stepIdx - 1); }}>◀</button>
+          <button style={btnStyle(total === 0 || stepIdx >= total - 1)} disabled={total === 0 || stepIdx >= total - 1} onClick={() => { setLiveFollow(false); clampStep(stepIdx + 1); }}>▶</button>
+          <button style={btnStyle(total === 0 || stepIdx >= total - 1)} disabled={total === 0 || stepIdx >= total - 1} onClick={() => { setLiveFollow(true); setStepIdx(total - 1); }}>⏭</button>
           <span style={{ fontSize: 11, color: '#666' }}>{total > 0 ? `${stepIdx + 1}/${total}` : '–'}</span>
         </div>
         <input
           type="range" min={0} max={Math.max(0, total - 1)} value={stepIdx}
-          onChange={e => setStepIdx(Number(e.target.value))}
+          onChange={e => { setLiveFollow(false); setStepIdx(Number(e.target.value)); }}
           style={{ width: '100%', marginTop: 6 }}
           disabled={total === 0}
         />
@@ -360,13 +508,13 @@ export default function App() {
         povSeat={povSeat}
         showAll={showAll}
         wall={displaySnap.wall}
-        center={<CenterInfo snap={displaySnap} seatAt={seatAt} hideLabels={!log} />}
+        center={<CenterInfo snap={displaySnap} seatAt={seatAt} hideLabels={!effectiveLog} />}
       />
-      {log && (
+      {effectiveLog && (
         <div style={{ ...panelStyle, marginTop: 10 }}>
           <strong style={{ fontSize: 12 }}>最終結果</strong>
           <div style={{ display: 'flex', gap: 10, marginTop: 4, flexWrap: 'wrap' }}>
-            {log.standings.map(s => (
+            {effectiveLog.standings.map(s => (
               <div key={s.seat} style={{ fontSize: 11, padding: '3px 8px', background: s.rank === 1 ? '#fffbe0' : '#f5f5f5', borderRadius: 4, border: '1px solid #ddd' }}>
                 <span style={{ fontWeight: 'bold' }}>{s.rank}位</span> seat{s.seat}
                 <span style={{ marginLeft: 4, color: '#555' }}>{s.rawScore}点</span>

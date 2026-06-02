@@ -4,6 +4,8 @@
  * 起動例:
  *   pnpm match
  *   pnpm match --models "gemma4:e2b,gemma4:e2b,qwen3.5:9b,qwen3-vl:8b" --seed 42
+ *   pnpm match --live              # viewer で http://localhost:7777 へ接続
+ *   pnpm match --live --live-port 8888
  */
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -12,6 +14,7 @@ import { HanchanEngine } from '../engine/hanchan.js';
 import { RiichiRsCalculator } from '../score/calculator.js';
 import { OllamaAgent } from '../agent/llm/ollama.js';
 import { exportLog, serializeLog } from '../log/log.js';
+import { LiveServer } from '../live/server.js';
 import type { Player } from '../agent/player.js';
 import type { Seat } from '../types/seat.js';
 
@@ -23,6 +26,7 @@ interface MatchOptions {
   baseUrl: string;
   timeoutMs: number;
   logFile: string | null;
+  livePort: number | null;
 }
 
 function parseArgs(argv: string[]): MatchOptions {
@@ -32,6 +36,7 @@ function parseArgs(argv: string[]): MatchOptions {
     baseUrl: process.env['OLLAMA_BASE_URL'] ?? 'http://localhost:11434',
     timeoutMs: 120000,
     logFile: null,
+    livePort: null,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
@@ -48,8 +53,12 @@ function parseArgs(argv: string[]): MatchOptions {
       opts.timeoutMs = Number(argv[++i]!) * 1000;
     } else if (a === '--log-file') {
       opts.logFile = argv[++i]!;
+    } else if (a === '--live') {
+      opts.livePort = opts.livePort ?? 7777;
+    } else if (a === '--live-port') {
+      opts.livePort = Number(argv[++i]!);
     } else if (a === '--help' || a === '-h') {
-      console.log('Usage: pnpm match [--models M0,M1,M2,M3] [--seed N] [--log-file PATH]');
+      console.log('Usage: pnpm match [--models M0,M1,M2,M3] [--seed N] [--log-file PATH] [--live] [--live-port PORT]');
       process.exit(0);
     }
   }
@@ -57,12 +66,12 @@ function parseArgs(argv: string[]): MatchOptions {
 }
 
 const WIND_JP = ['東', '南', '西', '北'] as const;
-const SEAT_WIND_FROM_DEALER = (seat: number, dealer: number) =>
-  WIND_JP[(seat - dealer + 4) % 4]!;
 
 async function playKyoku(
   hanchan: HanchanEngine,
   players: Player[],
+  kyokuIndex: number,
+  live: LiveServer | null,
 ): Promise<void> {
   const engine = hanchan.engine;
   const { round, dealerSeat } = engine.state;
@@ -71,12 +80,23 @@ async function playKyoku(
   console.log(`${windJp}${round.kyoku}局 ${round.honba}本場  dealer=seat${dealerSeat}`);
   console.log(`スコア: ${engine.state.players.map(p => `seat${p.seat}(${p.score})`).join('  ')}`);
 
+  let lastBroadcast = 0;
+  const broadcastNew = () => {
+    if (!live) return;
+    const evs = engine.events();
+    if (evs.length > lastBroadcast) {
+      live.broadcast({ type: 'events', kyokuIndex, events: evs.slice(lastBroadcast) });
+      lastBroadcast = evs.length;
+    }
+  };
+
   let safety = 1000;
   while (!engine.isOver() && safety-- > 0) {
     const phase = engine.state.turn.phase;
 
     if (phase === 'draw') {
       engine.step();
+      broadcastNew();
       continue;
     }
 
@@ -84,12 +104,13 @@ async function playKyoku(
       const seat = engine.state.turn.seat;
       const obs = engine.getObservation(seat);
       const acts = engine.legalActions(seat);
-      if (acts.length === 0) { engine.step(); continue; }
+      if (acts.length === 0) { engine.step(); broadcastNew(); continue; }
 
       const t0 = Date.now();
       const { action: chosen, reasoning, prompt, inputTokens, outputTokens } = await players[seat]!.decide(obs, acts);
       const elapsedMs = Date.now() - t0;
       engine.applyAction(seat, chosen, reasoning, prompt, players[seat]!.name, inputTokens, outputTokens, elapsedMs);
+      broadcastNew();
       continue;
     }
 
@@ -98,18 +119,22 @@ async function playKyoku(
       for (const pc of pending) {
         const obs = engine.getObservation(pc.seat);
         const acts = engine.legalActions(pc.seat);
-        if (acts.length === 0) { engine.applyAction(pc.seat, { kind: 'pass' }); continue; }
+        if (acts.length === 0) { engine.applyAction(pc.seat, { kind: 'pass' }); broadcastNew(); continue; }
 
         const t0 = Date.now();
         const { action: chosen, reasoning, prompt, inputTokens, outputTokens } = await players[pc.seat]!.decide(obs, acts);
         const elapsedMs = Date.now() - t0;
         engine.applyAction(pc.seat, chosen, reasoning, prompt, players[pc.seat]!.name, inputTokens, outputTokens, elapsedMs);
+        broadcastNew();
       }
       continue;
     }
 
     break;
   }
+
+  // 最後の未送信イベントをフラッシュ
+  broadcastNew();
 
   // 局結果表示
   const events = engine.events();
@@ -125,23 +150,6 @@ async function playKyoku(
   }
 }
 
-function actionSummary(a: import('../types/action.js').Action): string {
-  switch (a.kind) {
-    case 'tsumo': return 'ツモ和了';
-    case 'ron': return 'ロン和了';
-    case 'riichi': return `リーチ (${a.tile}切り)`;
-    case 'discard': return `打牌 ${a.tile}${a.tsumogiri ? '(ツモ切り)' : ''}`;
-    case 'pon': return 'ポン';
-    case 'chi': return `チー [${a.tiles.join(',')}]`;
-    case 'daiminkan': return '大明槓';
-    case 'ankan': return `暗槓 ${a.tile}`;
-    case 'kakan': return `加槓 ${a.tile}`;
-    case 'kyushu_kyuhai': return '九種九牌';
-    case 'pass': return 'パス';
-    default: return String((a as { kind: string }).kind);
-  }
-}
-
 async function main(): Promise<void> {
   const opts = parseArgs(process.argv.slice(2));
   console.log('=== LLM Mahjong 半荘対局 ===');
@@ -149,6 +157,14 @@ async function main(): Promise<void> {
   console.log('プレイヤー:');
   for (let i = 0; i < 4; i++) {
     console.log(`  seat${i}: ${opts.models[i]}`);
+  }
+
+  let live: LiveServer | null = null;
+  if (opts.livePort != null) {
+    live = new LiveServer(opts.livePort);
+    await live.start();
+    console.log(`\nLive viewer: http://localhost:${opts.livePort}/events`);
+    console.log('Viewer で「ライブ接続」ボタンを押してください。\n');
   }
 
   const calc = new RiichiRsCalculator();
@@ -166,10 +182,15 @@ async function main(): Promise<void> {
     calculator: calc,
   });
 
+  if (live) {
+    live.broadcast({ type: 'init', seed: opts.seed, models: opts.models });
+  }
+
   let kyokuCount = 0;
   let safety = 200;
   while (!hanchan.isGameOver() && safety-- > 0) {
-    await playKyoku(hanchan, players);
+    const kyokuIndex = hanchan.kyokuLogs.length;
+    await playKyoku(hanchan, players, kyokuIndex, live);
     if (!hanchan.isGameOver()) hanchan.advanceKyoku();
     kyokuCount++;
   }
@@ -183,6 +204,10 @@ async function main(): Promise<void> {
     console.log(`  ${s.rank}位 seat${s.seat}(${model}): ${s.rawScore}点  最終: ${s.finalScore > 0 ? '+' : ''}${s.finalScore}`);
   }
 
+  if (live) {
+    live.broadcast({ type: 'end', standings });
+  }
+
   const projectRoot = dirname(dirname(fileURLToPath(import.meta.url)));
   const ts = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
   const logFile = opts.logFile ?? join(projectRoot, 'logs', `${ts}.json`);
@@ -190,6 +215,8 @@ async function main(): Promise<void> {
   const log = exportLog(hanchan, opts.models);
   writeFileSync(logFile, serializeLog(log), 'utf8');
   console.log(`\nログ保存: ${logFile}`);
+
+  live?.close();
 }
 
 main().catch(err => { console.error(err); process.exit(1); });
