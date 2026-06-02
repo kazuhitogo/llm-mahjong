@@ -23,6 +23,7 @@ export interface RuleConfig {
   };
   noChoice: 'tobi-end' | 'continue';  // 飛び終了
   kuikaeBan: boolean;           // 喰い替え禁止
+  nishiiri: boolean;            // 西入り（南4局終了時全員returnPoints未満で西場突入）
 }
 
 /** デフォルト = 天鳳鳳凰卓ルール */
@@ -45,6 +46,7 @@ export const DEFAULT_RULES: RuleConfig = {
   },
   noChoice: 'tobi-end',
   kuikaeBan: true,
+  nishiiri: true,
 };
 
 /** 河（捨て牌列）のエントリ */

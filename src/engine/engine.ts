@@ -8,7 +8,7 @@ import type {
 } from '../types/state.js';
 import type { Tile, TileId, TileKind } from '../types/tile.js';
 import type { Meld } from '../types/meld.js';
-import type { Seat } from '../types/seat.js';
+import type { Seat, Wind } from '../types/seat.js';
 import type { Action } from '../types/action.js';
 import type { ScoreCalculator } from '../score/calculator.js';
 import { DEFAULT_RULES } from '../types/state.js';
@@ -54,7 +54,7 @@ export interface EngineOptions {
   rules?: Partial<RuleConfig>;
   rngSeed: number;
   dealerSeat?: Seat;
-  round?: { wind: 'E' | 'S'; kyoku: 1 | 2 | 3 | 4; honba: number; riichiSticks: number };
+  round?: { wind: Wind; kyoku: 1 | 2 | 3 | 4; honba: number; riichiSticks: number };
   initialScores?: [number, number, number, number];
   calculator?: ScoreCalculator;
 }

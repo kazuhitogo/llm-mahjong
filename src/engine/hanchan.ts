@@ -91,11 +91,26 @@ export class HanchanEngine {
       return;
     }
 
-    // 直前の局が最終局なら終了（残留供託棒は首位プレイヤーへ）
-    if (this._isLastKyoku()) {
+    // 西場中: 誰かが returnPoints 以上なら終了
+    if (this._round.wind === 'W' && this._scores.some(s => s >= this._config.returnPoints)) {
       distributeSticks();
       this._gameOver = true;
       return;
+    }
+
+    // 最終局判定
+    if (this._isLastKyoku()) {
+      // 西入り: 南4局 + 有効 + 全員 returnPoints 未満 → 西場へ続行
+      const canNishiiri =
+        this._config.nishiiri &&
+        this._round.wind === 'S' &&
+        this._round.kyoku === 4 &&
+        this._scores.every(s => s < this._config.returnPoints);
+      if (!canNishiiri) {
+        distributeSticks();
+        this._gameOver = true;
+        return;
+      }
     }
 
     // 連荘 / 親流れ判定
@@ -116,9 +131,10 @@ export class HanchanEngine {
       const newHonba = wasRyukyoku ? this._round.honba + 1 : 0;
       const newKyoku = this._round.kyoku + 1;
       if (newKyoku > 4) {
-        // 東→南
+        // 東→南 or 南→西
+        const nextWind = this._round.wind === 'E' ? 'S' : 'W';
         this._round = {
-          wind: 'S',
+          wind: nextWind,
           kyoku: 1,
           honba: newHonba,
           riichiSticks: newRiichiSticks,
@@ -150,7 +166,7 @@ export class HanchanEngine {
       calculator: this._calculator,
       rules: this._config,
       dealerSeat: this._dealerSeat,
-      round: { ...this._round, wind: this._round.wind as 'E' | 'S' },
+      round: { ...this._round },
       initialScores: [...this._scores] as [number, number, number, number],
     };
     return new GameEngine(opts);
@@ -159,6 +175,7 @@ export class HanchanEngine {
   private _isLastKyoku(): boolean {
     const { wind, kyoku } = this._round;
     if (this._config.gameLength === 'tonpu') return wind === 'E' && kyoku === 4;
+    if (wind === 'W' && kyoku === 4) return true;
     return wind === 'S' && kyoku === 4;
   }
 
