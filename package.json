@@ -22,7 +22,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "cli": "tsx src/cli/play.ts",
-    "match": "tsx src/cli/match.ts",
+    "match": "tsx --env-file=.env src/cli/match.ts",
     "viewer": "vite"
   },
   "engines": {

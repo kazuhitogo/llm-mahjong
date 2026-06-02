@@ -29,7 +29,7 @@ function parseArgs(argv: string[]): MatchOptions {
   const opts: MatchOptions = {
     models: [...DEFAULT_MODELS] as [string, string, string, string],
     seed: Date.now() & 0x7fffffff,
-    baseUrl: 'http://localhost:11434',
+    baseUrl: process.env['OLLAMA_BASE_URL'] ?? 'http://localhost:11434',
     timeoutMs: 120000,
     logFile: null,
   };

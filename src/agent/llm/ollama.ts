@@ -12,6 +12,7 @@ interface OllamaMessage {
 interface OllamaChatResponse {
   message: {
     content: string;
+    thinking?: string;
     tool_calls?: Array<{
       function: { name: string; arguments: Record<string, unknown> };
     }>;
@@ -58,13 +59,17 @@ export class OllamaAgent implements Player {
   private baseUrl: string;
   private timeoutMs: number;
   private _toolUseSupported = true;
+  private _useThink = false;
+  private _thinkDetected = false;
+  private _apiKey: string | undefined;
 
   constructor(opts: OllamaAgentOptions) {
     this.seat = opts.seat;
     this.model = opts.model;
     this.name = `${opts.model}@seat${opts.seat}`;
-    this.baseUrl = opts.baseUrl ?? 'http://localhost:11434';
+    this.baseUrl = opts.baseUrl ?? process.env['OLLAMA_BASE_URL'] ?? 'http://localhost:11434';
     this.timeoutMs = opts.timeoutMs ?? 120000;
+    this._apiKey = process.env['OLLAMA_API_KEY'];
   }
 
   async decide(obs: Observation, actions: Action[]): Promise<DecideResult> {
@@ -98,14 +103,17 @@ export class OllamaAgent implements Player {
           model: this.model,
           messages,
           stream: false,
-          think: false,
-          options: { temperature: 0.3, num_predict: 256 },
+          think: this._useThink,
+          options: { temperature: 0.3, num_predict: this._useThink ? 4096 : 2048 },
         };
         if (useTools) body['tools'] = [SELECT_ACTION_TOOL];
 
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (this._apiKey) headers['Authorization'] = `Bearer ${this._apiKey}`;
+
         const res = await fetch(`${this.baseUrl}/api/chat`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify(body),
           signal: ac.signal,
         });
@@ -117,11 +125,21 @@ export class OllamaAgent implements Player {
           }
           throw new Error(`Ollama HTTP ${res.status}`);
         }
-        return await res.json() as OllamaChatResponse;
+        const data = await res.json() as OllamaChatResponse;
+        // thinking モデル自動検出: content 空 + thinking あり → think:true に切替え、tool use も無効化してリトライ
+        if (!this._thinkDetected && !this._useThink && !data.message?.content && data.message?.thinking) {
+          this._useThink = true;
+          this._thinkDetected = true;
+          this._toolUseSupported = false;
+          return null;
+        }
+        this._thinkDetected = true;
+        return data;
       } finally {
         clearTimeout(timer);
       }
     } catch (err) {
+      if (useTools) this._toolUseSupported = false;
       console.error(`[${this.name}] Ollama error: ${err}`);
       return null;
     }
@@ -170,6 +188,9 @@ export class OllamaAgent implements Player {
 
     const text = data.message?.content ?? '';
     const result = this._parseCot(text, actions);
+    if (!result.reasoning && data.message?.thinking) {
+      result.reasoning = data.message.thinking.trim();
+    }
     if (data.prompt_eval_count != null) result.inputTokens = data.prompt_eval_count;
     if (data.eval_count != null) result.outputTokens = data.eval_count;
     return result;
