@@ -4,11 +4,12 @@ import type { ViewerSnapshot } from '../viewer-state.js';
 interface Props {
   snap: ViewerSnapshot;
   seatAt: { bottom: number; right: number; top: number; left: number };
+  hideLabels?: boolean;
 }
 
 const WIND_JP = ['東', '南', '西', '北'] as const;
 
-export function CenterInfo({ snap, seatAt }: Props) {
+export function CenterInfo({ snap, seatAt, hideLabels }: Props) {
   const { round, dealerSeat, wallRemaining } = snap;
   const windLabel = round.wind === 'E' ? '東' : '南';
   const diceSum = snap.dice[0] + snap.dice[1];
@@ -60,7 +61,8 @@ export function CenterInfo({ snap, seatAt }: Props) {
 
   const scoreBlock = (seat: number) => (
     <div style={scoreCell(seat)}>
-      {windOf(seat)}<br />{snap.scores[seat]}
+      {!hideLabels && <>{windOf(seat)}<br /></>}
+      {snap.scores[seat]}
     </div>
   );
 
@@ -72,11 +74,13 @@ export function CenterInfo({ snap, seatAt }: Props) {
 
       {scoreBlock(seatAt.left)}
       <div style={{ textAlign: 'center', fontSize: 11, lineHeight: 1.4 }}>
-        <div style={{ fontWeight: 'bold', fontSize: 13 }}>{windLabel}{round.kyoku}局</div>
-        <div style={{ color: '#ccc' }}>{round.honba}本場</div>
-        <div style={{ color: '#9ab' }}>供託 {round.riichiSticks}</div>
-        {diceText && <div style={{ color: '#fc6' }}>🎲 {diceText}</div>}
-        <div style={{ color: '#9ab' }}>残 {wallRemaining}</div>
+        {!hideLabels && <>
+          <div style={{ fontWeight: 'bold', fontSize: 13 }}>{windLabel}{round.kyoku}局</div>
+          <div style={{ color: '#ccc' }}>{round.honba}本場</div>
+          <div style={{ color: '#9ab' }}>供託 {round.riichiSticks}</div>
+          {diceText && <div style={{ color: '#fc6' }}>🎲 {diceText}</div>}
+          <div style={{ color: '#9ab' }}>残 {wallRemaining}</div>
+        </>}
       </div>
       {scoreBlock(seatAt.right)}
 

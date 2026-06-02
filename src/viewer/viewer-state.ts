@@ -134,6 +134,21 @@ function emptyPlayer(): ViewerPlayer {
   return { hand: [], discards: [], melds: [], riichi: false };
 }
 
+export function emptySnapshot(): ViewerSnapshot {
+  return {
+    eventIndex: -1,
+    event: {} as GameEvent,
+    description: '',
+    round: { wind: 'E', kyoku: 1, honba: 0, riichiSticks: 0 },
+    dealerSeat: 0,
+    players: [emptyPlayer(), emptyPlayer(), emptyPlayer(), emptyPlayer()],
+    wallRemaining: 70,
+    scores: [25000, 25000, 25000, 25000],
+    dice: [0, 0],
+    wall: { breakSeat: 0, dieSum: 0, drawnCount: 0, doraIndicators: [] },
+  };
+}
+
 function removeOneTile(hand: Tile[], tile: Tile): Tile[] {
   const idx = hand.indexOf(tile);
   if (idx >= 0) {

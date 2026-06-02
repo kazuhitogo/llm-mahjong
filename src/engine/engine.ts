@@ -259,9 +259,9 @@ export class GameEngine {
     reasoning?: string, prompt?: string,
     model?: string, inputTokens?: number, outputTokens?: number, elapsedMs?: number,
   ): void {
-    if (reasoning) {
+    if (model != null || reasoning || inputTokens != null || outputTokens != null || elapsedMs != null) {
       const thinkEv: { kind: 'think'; seat: Seat; reasoning: string; prompt?: string; model?: string; inputTokens?: number; outputTokens?: number; elapsedMs?: number; chosenAction?: Action }
-        = { kind: 'think', seat, reasoning, chosenAction: action };
+        = { kind: 'think', seat, reasoning: reasoning ?? '', chosenAction: action };
       if (prompt) thinkEv.prompt = prompt;
       if (model) thinkEv.model = model;
       if (inputTokens != null) thinkEv.inputTokens = inputTokens;

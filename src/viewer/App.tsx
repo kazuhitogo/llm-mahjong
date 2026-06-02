@@ -1,11 +1,16 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import type { CSSProperties, ChangeEvent } from 'react';
-import { buildSnapshots, type GameLog, type ViewerSnapshot } from './viewer-state.js';
+import { buildSnapshots, emptySnapshot, type GameLog, type ViewerSnapshot } from './viewer-state.js';
 import type { Action } from '../types/action.js';
 import { TableLayout } from './components/TableLayout.js';
 import { CenterInfo } from './components/CenterInfo.js';
 
 const WIND_JP = ['東', '南', '西', '北'] as const;
+const EMPTY_SNAP = emptySnapshot();
+const ZERO_TOKEN_USAGE: [TokenUsage, TokenUsage, TokenUsage, TokenUsage] = [
+  { in: 0, out: 0, calls: 0 }, { in: 0, out: 0, calls: 0 },
+  { in: 0, out: 0, calls: 0 }, { in: 0, out: 0, calls: 0 },
+];
 function seatLabel(s: number): string { return `seat${s}(${WIND_JP[s] ?? s}家)`; }
 
 function describeAction(seat: number, a: Action): string {
@@ -89,6 +94,7 @@ function computeKyokuStartScores(log: GameLog): [number, number, number, number]
 
 export default function App() {
   const [log, setLog] = useState<GameLog | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
   const [kyokuIdx, setKyokuIdx] = useState(0);
   const [stepIdx, setStepIdx] = useState(0);
   const [povSeat, setPovSeat] = useState(0);
@@ -99,7 +105,10 @@ export default function App() {
     [log],
   );
 
-  const tokenUsage = useMemo(() => (log ? computeTokenUsage(log) : null), [log]);
+  const tokenUsage = useMemo(
+    () => log ? computeTokenUsage(log) : ZERO_TOKEN_USAGE,
+    [log],
+  );
   const timeUsage = useMemo(() => (log ? computeTimeUsage(log) : null), [log]);
 
   const snapshots = useMemo<ViewerSnapshot[]>(() => {
@@ -112,6 +121,7 @@ export default function App() {
 
   const total = snapshots.length;
   const snap = snapshots[stepIdx] ?? null;
+  const displaySnap = snap ?? EMPTY_SNAP;
 
   const clampStep = useCallback((n: number) => {
     setStepIdx(Math.max(0, Math.min(n, total - 1)));
@@ -138,6 +148,7 @@ export default function App() {
       try {
         const parsed = JSON.parse(ev.target?.result as string) as GameLog;
         setLog(parsed);
+        setFileName(file.name);
         setKyokuIdx(0);
         setStepIdx(0);
       } catch {
@@ -196,7 +207,8 @@ export default function App() {
             />
           </label>
         </div>
-        {log && <div style={{ fontSize: 11, opacity: 0.6, marginTop: 6 }}>seed: {log.rngSeed}</div>}
+        {fileName && <div style={{ fontSize: 11, color: '#4a9', marginTop: 6, wordBreak: 'break-all' }}>{fileName}</div>}
+        {log && <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2 }}>seed: {log.rngSeed}</div>}
         {log?.models && (
           <div style={{ marginTop: 6 }}>
             {log.models.map((m, i) => (
@@ -208,123 +220,120 @@ export default function App() {
         )}
       </div>
 
-      {log && (
-        <>
-          {/* 局タブ */}
-          <div style={{ ...panelStyle, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-            {log.kyoku.map((k, i) => (
-              <button key={i} style={tabStyle(i === kyokuIdx)} onClick={() => setKyokuIdx(i)}>
-                {kyokuLabel(k)}
-              </button>
+      {/* 局タブ */}
+      <div style={{ ...panelStyle, display: 'flex', gap: 4, flexWrap: 'wrap', minHeight: 34 }}>
+        {log?.kyoku.map((k, i) => (
+          <button key={i} style={tabStyle(i === kyokuIdx)} onClick={() => setKyokuIdx(i)}>
+            {kyokuLabel(k)}
+          </button>
+        ))}
+      </div>
+
+      {/* 再生コントローラー */}
+      <div style={panelStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <button style={btnStyle(total === 0 || stepIdx === 0)} disabled={total === 0 || stepIdx === 0} onClick={() => setStepIdx(0)}>⏮</button>
+          <button style={btnStyle(total === 0 || stepIdx === 0)} disabled={total === 0 || stepIdx === 0} onClick={() => clampStep(stepIdx - 1)}>◀</button>
+          <button style={btnStyle(total === 0 || stepIdx >= total - 1)} disabled={total === 0 || stepIdx >= total - 1} onClick={() => clampStep(stepIdx + 1)}>▶</button>
+          <button style={btnStyle(total === 0 || stepIdx >= total - 1)} disabled={total === 0 || stepIdx >= total - 1} onClick={() => setStepIdx(total - 1)}>⏭</button>
+          <span style={{ fontSize: 11, color: '#666' }}>{total > 0 ? `${stepIdx + 1}/${total}` : '–'}</span>
+        </div>
+        <input
+          type="range" min={0} max={Math.max(0, total - 1)} value={stepIdx}
+          onChange={e => setStepIdx(Number(e.target.value))}
+          style={{ width: '100%', marginTop: 6 }}
+          disabled={total === 0}
+        />
+        <div style={{ fontSize: 10, color: '#999', marginTop: 2 }}>← → / ↑ ↓ / Home End</div>
+      </div>
+
+      {/* POV / 全開示 */}
+      <div style={{ ...panelStyle, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <label style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
+          POV:
+          <select
+            value={povSeat}
+            onChange={e => setPovSeat(Number(e.target.value))}
+            style={{ fontSize: 11, padding: '1px 4px' }}
+          >
+            {[0, 1, 2, 3].map(s => (
+              <option key={s} value={s}>seat{s}</option>
             ))}
-          </div>
+          </select>
+        </label>
+        <label style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <input
+            type="checkbox"
+            checked={showAll}
+            onChange={e => setShowAll(e.target.checked)}
+          />
+          全開示
+        </label>
+      </div>
 
-          {/* 再生コントローラー */}
-          <div style={panelStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <button style={btnStyle(stepIdx === 0)} disabled={stepIdx === 0} onClick={() => setStepIdx(0)}>⏮</button>
-              <button style={btnStyle(stepIdx === 0)} disabled={stepIdx === 0} onClick={() => clampStep(stepIdx - 1)}>◀</button>
-              <button style={btnStyle(stepIdx >= total - 1)} disabled={stepIdx >= total - 1} onClick={() => clampStep(stepIdx + 1)}>▶</button>
-              <button style={btnStyle(stepIdx >= total - 1)} disabled={stepIdx >= total - 1} onClick={() => setStepIdx(total - 1)}>⏭</button>
-              <span style={{ fontSize: 11, color: '#666' }}>{stepIdx + 1}/{total}</span>
+      {/* トークン使用量（全局通算） */}
+      <div style={panelStyle}>
+        <strong style={{ fontSize: 12 }}>トークン使用量（全局通算）</strong>
+        <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {tokenUsage.map((u, i) => (
+            <div key={i} style={{ fontSize: 10, color: '#444', lineHeight: 1.5 }}>
+              <span style={{ fontWeight: 'bold' }}>{seatLabel(i)}</span>
+              <span style={{ marginLeft: 4, color: '#06c' }}>IN {u.in.toLocaleString()}</span>
+              <span style={{ marginLeft: 4, color: '#c60' }}>OUT {u.out.toLocaleString()}</span>
+              <span style={{ marginLeft: 4, color: '#999' }}>({u.calls}回)</span>
             </div>
-            <input
-              type="range" min={0} max={total - 1} value={stepIdx}
-              onChange={e => setStepIdx(Number(e.target.value))}
-              style={{ width: '100%', marginTop: 6 }}
-            />
-            <div style={{ fontSize: 10, color: '#999', marginTop: 2 }}>← → / ↑ ↓ / Home End</div>
+          ))}
+          <div style={{ fontSize: 10, color: '#666', borderTop: '1px solid #eee', marginTop: 3, paddingTop: 3 }}>
+            合計 IN {tokenUsage.reduce((s, u) => s + u.in, 0).toLocaleString()}
+            {' / '}OUT {tokenUsage.reduce((s, u) => s + u.out, 0).toLocaleString()}
           </div>
+        </div>
+      </div>
 
-          {/* POV / 全開示 */}
-          <div style={{ ...panelStyle, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <label style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
-              POV:
-              <select
-                value={povSeat}
-                onChange={e => setPovSeat(Number(e.target.value))}
-                style={{ fontSize: 11, padding: '1px 4px' }}
-              >
-                {[0, 1, 2, 3].map(s => (
-                  <option key={s} value={s}>seat{s}</option>
-                ))}
-              </select>
-            </label>
-            <label style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
-              <input
-                type="checkbox"
-                checked={showAll}
-                onChange={e => setShowAll(e.target.checked)}
-              />
-              全開示
-            </label>
-          </div>
-
-          {/* トークン使用量（全局通算） */}
-          {tokenUsage && (
-            <div style={panelStyle}>
-              <strong style={{ fontSize: 12 }}>トークン使用量（全局通算）</strong>
-              <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                {tokenUsage.map((u, i) => (
-                  <div key={i} style={{ fontSize: 10, color: '#444', lineHeight: 1.5 }}>
-                    <span style={{ fontWeight: 'bold' }}>{seatLabel(i)}</span>
-                    <span style={{ marginLeft: 4, color: '#06c' }}>IN {u.in.toLocaleString()}</span>
-                    <span style={{ marginLeft: 4, color: '#c60' }}>OUT {u.out.toLocaleString()}</span>
-                    <span style={{ marginLeft: 4, color: '#999' }}>({u.calls}回)</span>
-                  </div>
-                ))}
-                <div style={{ fontSize: 10, color: '#666', borderTop: '1px solid #eee', marginTop: 3, paddingTop: 3 }}>
-                  合計 IN {tokenUsage.reduce((s, u) => s + u.in, 0).toLocaleString()}
-                  {' / '}OUT {tokenUsage.reduce((s, u) => s + u.out, 0).toLocaleString()}
-                </div>
+      {/* 思考時間（全局通算） */}
+      {timeUsage && timeUsage.some(u => u.calls > 0) && (
+        <div style={panelStyle}>
+          <strong style={{ fontSize: 12 }}>思考時間（全局通算）</strong>
+          <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {timeUsage.map((u, i) => (
+              <div key={i} style={{ fontSize: 10, color: '#444', lineHeight: 1.5 }}>
+                <span style={{ fontWeight: 'bold' }}>{seatLabel(i)}</span>
+                <span style={{ marginLeft: 4, color: '#080' }}>合計 {fmtMs(u.totalMs)}</span>
+                <span style={{ marginLeft: 4, color: '#999' }}>({u.calls}回)</span>
+                {u.calls > 0 && (
+                  <span style={{ marginLeft: 4, color: '#666' }}>avg {fmtMs(Math.round(u.totalMs / u.calls))}</span>
+                )}
               </div>
+            ))}
+            <div style={{ fontSize: 10, color: '#666', borderTop: '1px solid #eee', marginTop: 3, paddingTop: 3 }}>
+              合計 {fmtMs(timeUsage.reduce((s, u) => s + u.totalMs, 0))}
             </div>
-          )}
-
-          {/* 思考時間（全局通算） */}
-          {timeUsage && timeUsage.some(u => u.calls > 0) && (
-            <div style={panelStyle}>
-              <strong style={{ fontSize: 12 }}>思考時間（全局通算）</strong>
-              <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                {timeUsage.map((u, i) => (
-                  <div key={i} style={{ fontSize: 10, color: '#444', lineHeight: 1.5 }}>
-                    <span style={{ fontWeight: 'bold' }}>{seatLabel(i)}</span>
-                    <span style={{ marginLeft: 4, color: '#080' }}>合計 {fmtMs(u.totalMs)}</span>
-                    <span style={{ marginLeft: 4, color: '#999' }}>({u.calls}回)</span>
-                    {u.calls > 0 && (
-                      <span style={{ marginLeft: 4, color: '#666' }}>avg {fmtMs(Math.round(u.totalMs / u.calls))}</span>
-                    )}
-                  </div>
-                ))}
-                <div style={{ fontSize: 10, color: '#666', borderTop: '1px solid #eee', marginTop: 3, paddingTop: 3 }}>
-                  合計 {fmtMs(timeUsage.reduce((s, u) => s + u.totalMs, 0))}
-                </div>
-              </div>
-            </div>
-          )}
-        </>
+          </div>
+        </div>
       )}
     </div>
   );
 
-  const rightColumn = snap && (
+  const rightColumn = (
     <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {snap.thinkEvent ? (
-        <div style={{ ...panelStyle, borderLeft: '4px solid #a8a', background: '#f9f0ff' }}>
-          <div style={{
-            fontSize: 12, fontWeight: 'bold', color: '#1a4a1a', background: '#e6f4ea',
-            border: '1px solid #9c9', borderRadius: 4, padding: '4px 8px', marginBottom: 8,
-          }}>
-            {snap.description}
+      {displaySnap.description && (
+        displaySnap.thinkEvent ? (
+          <div style={{ ...panelStyle, borderLeft: '4px solid #a8a', background: '#f9f0ff' }}>
+            <div style={{
+              fontSize: 12, fontWeight: 'bold', color: '#1a4a1a', background: '#e6f4ea',
+              border: '1px solid #9c9', borderRadius: 4, padding: '4px 8px', marginBottom: 8,
+            }}>
+              {displaySnap.description}
+            </div>
+            <div style={{ fontSize: 12, color: '#555', whiteSpace: 'pre-wrap' }}>{displaySnap.thinkEvent.reasoning}</div>
           </div>
-          <div style={{ fontSize: 12, color: '#555', whiteSpace: 'pre-wrap' }}>{snap.thinkEvent.reasoning}</div>
-        </div>
-      ) : (
-        <div style={{ ...panelStyle, fontSize: 12, color: '#333', borderLeft: '4px solid #4a9' }}>
-          {snap.description}
-        </div>
+        ) : (
+          <div style={{ ...panelStyle, fontSize: 12, color: '#333', borderLeft: '4px solid #4a9' }}>
+            {displaySnap.description}
+          </div>
+        )
       )}
-      {snap.thinkEvent?.prompt && (
+      {displaySnap.thinkEvent?.prompt && (
         <div style={panelStyle}>
           <details open>
             <summary style={{ fontSize: 11, color: '#888', cursor: 'pointer', userSelect: 'none' }}>
@@ -335,7 +344,7 @@ export default function App() {
               borderRadius: 4, padding: '6px 8px', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
               maxHeight: 480, overflow: 'auto', color: '#333',
             }}>
-              {snap.thinkEvent.prompt}
+              {displaySnap.thinkEvent.prompt}
             </pre>
           </details>
         </div>
@@ -345,37 +354,28 @@ export default function App() {
 
   const centerColumn = (
     <div style={{ flexShrink: 0 }}>
-      {log && snap ? (
-        <>
-          <TableLayout
-            players={snap.players}
-            seatAt={seatAt}
-            povSeat={povSeat}
-            showAll={showAll}
-            wall={snap.wall}
-            center={<CenterInfo snap={snap} seatAt={seatAt} />}
-          />
-          {/* 最終結果 */}
-          <div style={{ ...panelStyle, marginTop: 10 }}>
-            <strong style={{ fontSize: 12 }}>最終結果</strong>
-            <div style={{ display: 'flex', gap: 10, marginTop: 4, flexWrap: 'wrap' }}>
-              {log.standings.map(s => (
-                <div key={s.seat} style={{ fontSize: 11, padding: '3px 8px', background: s.rank === 1 ? '#fffbe0' : '#f5f5f5', borderRadius: 4, border: '1px solid #ddd' }}>
-                  <span style={{ fontWeight: 'bold' }}>{s.rank}位</span> seat{s.seat}
-                  <span style={{ marginLeft: 4, color: '#555' }}>{s.rawScore}点</span>
-                  <span style={{ marginLeft: 3, color: s.finalScore >= 0 ? '#060' : '#c00', fontWeight: 'bold' }}>
-                    {s.finalScore > 0 ? '+' : ''}{s.finalScore}
-                  </span>
-                </div>
-              ))}
-            </div>
+      <TableLayout
+        players={displaySnap.players}
+        seatAt={seatAt}
+        povSeat={povSeat}
+        showAll={showAll}
+        wall={displaySnap.wall}
+        center={<CenterInfo snap={displaySnap} seatAt={seatAt} hideLabels={!log} />}
+      />
+      {log && (
+        <div style={{ ...panelStyle, marginTop: 10 }}>
+          <strong style={{ fontSize: 12 }}>最終結果</strong>
+          <div style={{ display: 'flex', gap: 10, marginTop: 4, flexWrap: 'wrap' }}>
+            {log.standings.map(s => (
+              <div key={s.seat} style={{ fontSize: 11, padding: '3px 8px', background: s.rank === 1 ? '#fffbe0' : '#f5f5f5', borderRadius: 4, border: '1px solid #ddd' }}>
+                <span style={{ fontWeight: 'bold' }}>{s.rank}位</span> seat{s.seat}
+                <span style={{ marginLeft: 4, color: '#555' }}>{s.rawScore}点</span>
+                <span style={{ marginLeft: 3, color: s.finalScore >= 0 ? '#060' : '#c00', fontWeight: 'bold' }}>
+                  {s.finalScore > 0 ? '+' : ''}{s.finalScore}
+                </span>
+              </div>
+            ))}
           </div>
-        </>
-      ) : (
-        <div style={{ width: 720, textAlign: 'center', marginTop: 80, color: '#888' }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>🀄</div>
-          <div style={{ color: '#aaa' }}>ログファイル (.json) を読み込んでください</div>
-          <div style={{ fontSize: 12, marginTop: 4, color: '#666' }}>pnpm match --log-file game.json で生成</div>
         </div>
       )}
     </div>
