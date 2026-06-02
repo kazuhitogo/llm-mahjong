@@ -18,7 +18,7 @@ import { LiveServer } from '../live/server.js';
 import type { Player } from '../agent/player.js';
 import type { Seat } from '../types/seat.js';
 
-const DEFAULT_MODELS = ['gemma3:4b', 'gemma3:4b', 'gemma3:4b', 'gemma3:4b'] as const;
+const DEFAULT_MODELS = ['gemma3:12b', 'ministral-3:8b', 'ministral-3:14b', 'gemma3:4b'] as const;
 
 interface MatchOptions {
   models: [string, string, string, string];
