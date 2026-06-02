@@ -20,6 +20,8 @@ interface OllamaChatResponse {
   done: boolean;
   prompt_eval_count?: number;
   eval_count?: number;
+  // OpenAI-compatible usage (Ollama Cloud may return this format)
+  usage?: { prompt_tokens?: number; completion_tokens?: number };
 }
 
 const SELECT_ACTION_TOOL = {
@@ -126,6 +128,16 @@ export class OllamaAgent implements Player {
           throw new Error(`Ollama HTTP ${res.status}`);
         }
         const data = await res.json() as OllamaChatResponse;
+        const inTok = data.prompt_eval_count ?? data.usage?.prompt_tokens;
+        const outTok = data.eval_count ?? data.usage?.completion_tokens;
+        console.log(`  [${this.name}] tokens: in=${inTok ?? '–'} out=${outTok ?? '–'}`);
+        // Normalize: unify into standard fields so callers don't need to know format
+        if (data.prompt_eval_count == null && data.usage?.prompt_tokens != null) {
+          data.prompt_eval_count = data.usage.prompt_tokens;
+        }
+        if (data.eval_count == null && data.usage?.completion_tokens != null) {
+          data.eval_count = data.usage.completion_tokens;
+        }
         // thinking モデル自動検出: content 空 + thinking あり → think:true に切替え、tool use も無効化してリトライ
         if (!this._thinkDetected && !this._useThink && !data.message?.content && data.message?.thinking) {
           this._useThink = true;
