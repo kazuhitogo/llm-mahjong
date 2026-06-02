@@ -1,7 +1,7 @@
 import type { GameEvent } from '../types/state.js';
 import type { Seat } from '../types/seat.js';
 import type { Tile } from '../types/tile.js';
-import { tileKind } from '../tiles/tile.js';
+import { tileKind, sortTiles } from '../tiles/tile.js';
 import type { GameLog } from '../log/log.js';
 
 export type { GameLog };
@@ -324,14 +324,14 @@ export function buildSnapshots(
 
       case 'draw': {
         const p = players[ev.seat]!;
-        players[ev.seat] = { ...p, hand: [...p.hand, ev.tile] };
+        players[ev.seat] = { ...p, hand: sortTiles([...p.hand, ev.tile]) };
         drawnCount++;
         break;
       }
 
       case 'rinshan': {
         const p = players[ev.seat]!;
-        players[ev.seat] = { ...p, hand: [...p.hand, ev.tile] };
+        players[ev.seat] = { ...p, hand: sortTiles([...p.hand, ev.tile]) };
         break;
       }
 
