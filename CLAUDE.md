@@ -34,7 +34,7 @@ Phase 6（Viewer ビジュアルリニューアル）完了。残タスクなし
 ## 必須チェック
 
 ```bash
-pnpm test        # 全テスト通過（124件）を確認
+pnpm test        # 全テスト通過（126件）を確認
 pnpm typecheck   # TypeScript エラーなしを確認
 pnpm viewer      # ブラウザで目視確認（viewer 変更時）
 ```
@@ -57,3 +57,6 @@ pnpm viewer      # ブラウザで目視確認（viewer 変更時）
 - ダブロン連荘: `events.some(e => e.kind==='agari' && e.winner===dealerSeat)` で判定（`lastAgari` だけ見るのは誤り）
 - 流し満貫発動時はノーテン罰符なし（`applyNagashiMangan()` が `true` を返したらスキップ）
 - リーチ宣言の tenpai 検証: `waitTiles(handAfterDiscard, melds).length === 0` なら violation
+- 西入り: 南4局終了時に全員 returnPoints 未満 → 西場突入（`RuleConfig.nishiiri: true`）
+- viewer 手牌ソート: draw/rinshan 後に `sortTiles()` を viewer-state.ts で適用（エンジン側ソートは引き継がれない）
+- ライブビューア: `LiveServer`（src/live/server.ts）が SSE /events を提供、replay buffer で接続後に全履歴を送信

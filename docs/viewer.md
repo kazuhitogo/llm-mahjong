@@ -4,6 +4,8 @@
 
 ## データフロー
 
+### ログファイル再生
+
 ```
 pnpm match --log-file game.json
   → src/logs/{timestamp}.json（GameLog 形式）
@@ -13,6 +15,29 @@ pnpm match --log-file game.json
   → React state で stepIdx 管理 → snap: ViewerSnapshot
   → TableLayout + CenterInfo に渡して描画
 ```
+
+### リアルタイム観戦（ライブ）
+
+```
+pnpm match --live [--live-port PORT]
+  → LiveServer（src/live/server.ts）が SSE エンドポイント /events を起動
+
+ブラウザ「ライブ接続」ボタン
+  → EventSource('/events') で SSE 接続
+  → replay buffer で接続前のイベントも受信
+
+受信メッセージ:
+  { type: 'init', seed, models }     ← 対局開始
+  { type: 'events', kyokuIndex, events }  ← イベント差分
+  { type: 'end', standings }         ← 半荘終了
+
+liveLog が存在する間は effectiveLog = liveLog（ファイルログより優先）
+```
+
+## viewer-state.ts の注意点
+
+- `draw` / `rinshan` イベントで牌を追加した後、`sortTiles()` を適用して手牌を常にソート順（マンズ→ピンズ→ソーズ→字牌）に保つ
+- エンジン側のソートは viewer に引き継がれないため viewer 側で独自に実施
 
 ## 主要型（`viewer-state.ts`）
 
@@ -101,7 +126,7 @@ const seatAt = { bottom: povSeat, right: (povSeat+1)%4, top: (povSeat+2)%4, left
   - 開門壁では右端から `dieSum+1` スタック目が配牌開始（`o=0`）。王牌（`o≥122`, 14枚）は割れ目の直右7スタックに配置（T≥7 時）。嶺上牌（`deadIdx 0..3`）= 割れ目に最も近い左2スタック、ドラ表示牌（`deadIdx 4`）= 上段・左から3番目。偶数 deadIdx = 上段（表ドラ位置）、奇数 = 下段（裏ドラ位置）。
   - 非開門壁は壁順 `breakSeat → breakSeat-1 → -2 → -3` で右端(o小)→左端(o大)。
   - `o<drawnCount`=消費済み（薄）、王牌（`o≥122` ＋カン繰り上げ `o≥liveLimit`）=琥珀、ドラ表示牌位置（`deadWall[4],[6],…`）=表向き（`FrontTile`）。嶺上で取られた王牌スロットは消費済み表示で王牌を常に14枚に保つ
-- **手牌（HandPart）**: 自家／全開示は `FrontTile`、他家は `BackTile`。右側に鳴き面子を底辺揃えで並べる
+- **手牌（HandPart）**: 自家／全開示は `FrontTile`、他家は `BackTile`。右側に鳴き面子を底辺揃えで並べる。全開示はデフォルト `true`（左カラムのトグルで切替可）
 - **鳴き面子（MeldView / buildMeld）**: 入手牌のみ横倒し（`SideTile` = `FrontTile` を 90° 回転）。横倒しの位置は鳴いた相手で決まる（上家=左 / 対面=中 / 下家=右）。加槓は横向き 2 枚を縦に積む。暗槓は両端を `FlatTile` で伏せ中 2 枚を表向き
 
 ## CenterInfo
@@ -115,7 +140,8 @@ const seatAt = { bottom: povSeat, right: (povSeat+1)%4, top: (povSeat+2)%4, left
 - タイトル・ログ読込（`<label>` で `<input type=file>` を包む）・seed 表示・モデル名（`log.models` があるとき seat0〜3 を一覧）
 - 局タブ: `log.kyoku[]` から `init` イベントの局ラベルを生成（縦並び/折り返し）
 - ⏮◀▶⏭ ボタン + スライダー + ← → / ↑ ↓ / Home / End キー
-- POV 選択（select: seat0〜3）、全開示トグル
+- POV 選択（select: seat0〜3）、全開示トグル（デフォルト: 全員表示）
+- ライブポート入力 + 「ライブ接続」ボタン（デフォルトポート 7777）
 
 右カラム:
 

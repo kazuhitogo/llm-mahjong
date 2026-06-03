@@ -15,6 +15,7 @@
 - 飛び終了あり（0点未満）
 - 連荘条件: 親の聴牌または和了（ダブロン時は和了者の**いずれか**が親なら連荘）
 - 二翻縛りなし（常に1翻縛り）
+- 西入りあり（`RuleConfig.nishiiri: true`）: 南4局終了時に全員 30,000 未満 → 西場へ突入
 
 `RuleConfig` / `DEFAULT_RULES` → `src/types/state.ts`
 

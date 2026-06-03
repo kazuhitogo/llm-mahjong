@@ -11,10 +11,10 @@ LLM エージェント同士が対戦する日本リーチ麻雀エンジン（T
 - 配牌・ツモ・打牌・鳴き・リーチ・和了の進行制御
 - 合法手の列挙（LLM エージェントが選択前にエンジンが提示）
 - 役判定・符計算・点数授受（`riichi-rs-node` Rust ライブラリ経由）
-- 半荘進行（連荘・流局・本場・供託）
-- LLM エージェント向け自然言語プロンプト整形（Ollama 対応）
+- 半荘進行（連荘・流局・本場・供託・西入り）
+- LLM エージェント向け自然言語プロンプト整形（Ollama / Ollama Cloud 対応）
 - 対局ログ（決定論的 JSON、後から再現可能）
-- Web ビューア（牌譜を 1 ステップずつ再生）
+- Web ビューア（牌譜再生 + SSE リアルタイム観戦）
 
 **含まないもの**（v1）:
 - 強化学習・教師あり学習
@@ -34,6 +34,7 @@ src/
   score/      riichi-rs-node ラッパ・点数支払い計算・順位計算
   agent/      Player インタフェース・OllamaAgent・ScriptedBot
   log/        GameLog 型・シリアライズ・replayKyoku
+  live/       LiveServer（SSE ブロードキャスト・replay buffer）
   cli/        play.ts（人間 CLI）・match.ts（LLM 対局ハーネス）
   viewer/     Web ビューア（Vite + React）
 ```
