@@ -19,7 +19,7 @@ function seatLabel(s: number): string { return `seat${s}(${WIND_JP[s] ?? s}家)`
 function kyokuLabel(ev: GameLog['kyoku'][number]): string {
   const init = ev.events.find(e => e.kind === 'init');
   if (!init || init.kind !== 'init') return `局${ev.kyokuIndex + 1}`;
-  const w = init.round.wind === 'E' ? '東' : '南';
+  const w = { E: '東', S: '南', W: '西', N: '北' }[init.round.wind] ?? init.round.wind;
   return `${w}${init.round.kyoku}局`;
 }
 
