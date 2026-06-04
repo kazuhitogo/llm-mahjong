@@ -96,6 +96,24 @@ interface FinalStanding {
   seat: Seat;
   rank: 1 | 2 | 3 | 4;
   rawScore: number;    // 終局時の素点
-  finalScore: number;  // (rawScore - returnPoints) / 1000 + uma[rank-1] + oka(1位のみ)
+  finalScore: number;  // ウマ・オカ込み最終スコア（単位: 千点、整数）
 }
 ```
+
+### 計算ルール（天鳳方式）
+
+- 2〜4位: `Math.trunc(rawScore / 1000) - returnPoints/1000 + uma[rank-1]`（100点以下切り捨て）
+- 1位: `-(2位 + 3位 + 4位の合計)`（端数を全部吸収してゼロサム保証）
+- オカ（`(returnPoints - startingPoints) * 4 / 1000`）は 1位が暗黙的に受け取る形になる
+
+### 席決め（assignSeats）
+
+`src/engine/seat-assignment.ts`
+
+```ts
+// 戻り値: seatToPlayer[seat] = playerIndex (0-3)
+function assignSeats(seed: number): [Seat, Seat, Seat, Seat]
+```
+
+`seed` から Mulberry32 で東南西北をシャッフルし、各 seat に座るプレイヤー index を返す。
+`pnpm match` はゲーム seed と同じ値を使うため完全再現可能。

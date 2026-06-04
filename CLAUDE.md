@@ -49,3 +49,6 @@ pnpm viewer      # ブラウザで目視確認（viewer 変更時）
 - 西入り: 南4局終了時に全員 returnPoints 未満 → 西場突入（`RuleConfig.nishiiri: true`）
 - viewer 手牌ソート: draw/rinshan 後に `sortTiles()` を viewer-state.ts で適用（エンジン側ソートは引き継がれない）
 - ライブビューア: `LiveServer`（src/live/server.ts）が SSE /events を提供、replay buffer で接続後に全履歴を送信
+- 席決め: `assignSeats(seed)` は `seed ^ 0x5ea7_dead` で別 RNG インスタンスを生成しシャッフル（ゲーム山の RNG と独立）
+- 順位計算: 天鳳方式で 100 点切り捨て（`Math.trunc(score/1000)`）、端数は 1 位が吸収してゼロサム保証
+- ログの `models` 配列は seat 順（`seatToPlayer` で変換済み）なのでビューアは `models[seat]` で直引き可能

@@ -30,7 +30,7 @@ src/
   types/      Tile, Action, GameState, Meld, Seat 等の型定義
   tiles/      牌操作ユーティリティ（ソート・種別判定・赤ドラ変換）
   wall/       山生成（seed + サイコロ）・ドラ・嶺上
-  engine/     GameEngine（1局）・HanchanEngine（半荘）・合法手・フリテン
+  engine/     GameEngine（1局）・HanchanEngine（半荘）・合法手・フリテン・席決め
   score/      riichi-rs-node ラッパ・点数支払い計算・順位計算
   agent/      Player インタフェース・OllamaAgent・ScriptedBot
   log/        GameLog 型・シリアライズ・replayKyoku
