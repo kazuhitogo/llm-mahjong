@@ -15,26 +15,32 @@ export interface FinalStanding {
  */
 export function computeStandings(
   scores: readonly [number, number, number, number],
-  config: Pick<RuleConfig, 'startingPoints' | 'returnPoints' | 'uma'>,
+  config: Pick<RuleConfig, 'returnPoints' | 'uma'>,
 ): FinalStanding[] {
-  const oka = ((config.returnPoints - config.startingPoints) * 4) / 1000;
-
   // rank: 同点なら seat 昇順で上位
   const order = ([0, 1, 2, 3] as Seat[]).sort((a, b) => {
     if (scores[b] !== scores[a]) return scores[b] - scores[a];
     return a - b;
   });
 
-  return order.map((seat, idx) => {
-    const rank = (idx + 1) as 1 | 2 | 3 | 4;
-    const diff = (scores[seat] - config.returnPoints) / 1000;
-    const uma = config.uma[idx]!;
-    const extra = rank === 1 ? oka : 0;
-    return {
-      seat,
-      rank,
-      rawScore: scores[seat],
-      finalScore: Math.round((diff + uma + extra) * 10) / 10,
-    };
-  });
+  const returnPts = config.returnPoints / 1000;
+
+  // 2〜4位: 100点切り捨て
+  const nonFirst = order.slice(1).map((seat, i) => ({
+    seat,
+    rank: (i + 2) as 2 | 3 | 4,
+    rawScore: scores[seat],
+    finalScore: Math.trunc(scores[seat] / 1000) - returnPts + config.uma[i + 1]!,
+  }));
+
+  // 1位: 端数を全部吸収してゼロサムを保証
+  const firstFinal = -(nonFirst.reduce((s, p) => s + p.finalScore, 0));
+  const first: FinalStanding = {
+    seat: order[0]!,
+    rank: 1,
+    rawScore: scores[order[0]!],
+    finalScore: firstFinal,
+  };
+
+  return [first, ...nonFirst];
 }

@@ -11,6 +11,7 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HanchanEngine } from '../engine/hanchan.js';
+import { assignSeats } from '../engine/seat-assignment.js';
 import { RiichiRsCalculator } from '../score/calculator.js';
 import { OllamaAgent } from '../agent/llm/ollama.js';
 import { exportLog, serializeLog } from '../log/log.js';
@@ -154,9 +155,12 @@ async function main(): Promise<void> {
   const opts = parseArgs(process.argv.slice(2));
   console.log('=== LLM Mahjong 半荘対局 ===');
   console.log(`seed: ${opts.seed}`);
-  console.log('プレイヤー:');
-  for (let i = 0; i < 4; i++) {
-    console.log(`  seat${i}: ${opts.models[i]}`);
+
+  const seatToPlayer = assignSeats(opts.seed);
+  console.log('【席決め】');
+  for (let seat = 0; seat < 4; seat++) {
+    const playerIdx = seatToPlayer[seat as Seat]!;
+    console.log(`  seat${seat}(${WIND_JP[seat]}): player${playerIdx} (${opts.models[playerIdx]})`);
   }
 
   let live: LiveServer | null = null;
@@ -168,10 +172,10 @@ async function main(): Promise<void> {
   }
 
   const calc = new RiichiRsCalculator();
-  const players: Player[] = opts.models.map((model, i) =>
+  const players: Player[] = seatToPlayer.map((playerIdx, seat) =>
     new OllamaAgent({
-      seat: i as Seat,
-      model,
+      seat: seat as Seat,
+      model: opts.models[playerIdx]!,
       baseUrl: opts.baseUrl,
       timeoutMs: opts.timeoutMs,
     }),
@@ -182,8 +186,10 @@ async function main(): Promise<void> {
     calculator: calc,
   });
 
+  const seatModels = seatToPlayer.map(pi => opts.models[pi]!) as [string, string, string, string];
+
   if (live) {
-    live.broadcast({ type: 'init', seed: opts.seed, models: opts.models });
+    live.broadcast({ type: 'init', seed: opts.seed, models: seatModels });
   }
 
   let kyokuCount = 0;
@@ -200,7 +206,8 @@ async function main(): Promise<void> {
   console.log('\n【最終スコア】');
   const standings = hanchan.standings();
   for (const s of standings) {
-    const model = opts.models[s.seat]!;
+    const playerIdx = seatToPlayer[s.seat]!;
+    const model = opts.models[playerIdx]!;
     console.log(`  ${s.rank}位 seat${s.seat}(${model}): ${s.rawScore}点  最終: ${s.finalScore > 0 ? '+' : ''}${s.finalScore}`);
   }
 
@@ -212,7 +219,7 @@ async function main(): Promise<void> {
   const ts = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
   const logFile = opts.logFile ?? join(projectRoot, 'logs', `${ts}.json`);
   mkdirSync(dirname(logFile), { recursive: true });
-  const log = exportLog(hanchan, opts.models);
+  const log = exportLog(hanchan, seatModels);
   writeFileSync(logFile, serializeLog(log), 'utf8');
   console.log(`\nログ保存: ${logFile}`);
 
